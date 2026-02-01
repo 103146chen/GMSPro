@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <title>GMSPro - 成績管理與自動通知系統</title>
+  <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1" />
+  <meta name="description" content="GMSPro GradeFlow AutomaticHomeworkNotifier GAS">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, minimum-scale=1.0">
+  <link rel="stylesheet" href="//cdn.jsdelivr.net/npm/docsify@4/lib/themes/vue.css">
+</head>
+<body>
+  <div id="app">載入中...</div>
+  <script>
+    window.docsify = {
+      name: 'GMSPro',
+      repo: 'https://github.com/您的帳號/GMSPro', // 請換成您的 GitHub 網址
+      loadSidebar: true,
+      loadNavbar: false,
+      coverpage: true,
+      auto2top: true,
+      search: {
+        placeholder: '搜尋文件...',
+        noData: '找不到結果',
+        depth: 6
+      },
+      copyCode: {
+        buttonText: '複製',
+        errorText: '錯誤',
+        successText: '已複製'
+      },
+      // 定義別名，讓根目錄的檔案可以被讀取
+      alias: {
+        '/.*/_sidebar.md': '/_sidebar.md',
+        '/CHANGELOG': 'https://raw.githubusercontent.com/您的帳號/GMSPro/main/CHANGELOG.md',
+        '/PRIVACY': 'https://raw.githubusercontent.com/您的帳號/GMSPro/main/PRIVACY.md'
+      }
+    }
+  </script>
+  <script src="//cdn.jsdelivr.net/npm/docsify@4/lib/docsify.min.js"></script>
+  <script src="//cdn.jsdelivr.net/npm/docsify/lib/plugins/search.min.js"></script>
+  <script src="//cdn.jsdelivr.net/npm/docsify-copy-code/dist/docsify-copy-code.min.js"></script>
+  <script src="//cdn.jsdelivr.net/npm/prismjs@1/components/prism-bash.min.js"></script>
+  <script src="//cdn.jsdelivr.net/npm/prismjs@1/components/prism-javascript.min.js"></script>
+</body>
+</html>

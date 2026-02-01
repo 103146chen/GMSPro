@@ -1,85 +1,45 @@
 # Change Log
 
-> **System Overview**: 本系統由兩大核心專案並行運作：
-> 1.  **GradeFlow**: 負責成績計算、資料庫管理、前端查詢介面 (Student Portal)。
-> 2.  **AutomaticHomeworkNotifier**: 負責缺交掃描、排程監控、郵件通知發送。
->
-> **Current Version:** v10.4
+All notable changes to the **GMSPro** project will be documented in this file.
 
----
+The project consists of two main modules: `[GradeFlow]` and `[Notifier]`.
 
-## v10.4 - 系統健康檢查 (System Health Check)
-*針對兩大模組的底層邏輯進行效能優化與錯誤修復。*
+## v10.10 - The Integration Update (2026-02-01)
+*整合檔案瀏覽器介面與自動化流程，提升整體協作效率。*
+- **[System] 檔案總管 (File Explorer)**：新增統一的檔案瀏覽介面，可直接預覽、開啟或管理由系統產生的試算表。
+- **[System] Data Hub 整合**：優化了中繼資料的讀取效率，減少重複的 API 呼叫。
 
-### 🟢 [GradeFlow] 成績運算核心
-- **迴圈邏輯反轉 (Loop Reversal)**：
-  - 將運算邏輯從「逐一學生跑所有成績」修正為 **「逐一作業跑所有學生」**。
-  - **效益**：確保記憶體在計算排名或平均時，同時只存在單一作業的數據，完全杜絕成績錯置 (Cross-contamination) 風險，並大幅提升運算速度。
-- **UID 生成機制更新**：
-  - 改用 `sheetName + "_" + columnIndex` 作為作業的唯一識別碼。
-  - **效益**：解決不同分頁若有相同作業名稱（如：兩次段考都有「國文」）可能導致的 ID 衝突。
+## v10.4 - System Health Check (核心邏輯修復)
+*針對系統底層邏輯進行的大規模除錯與效能優化。*
+- **🟢 [GradeFlow] 迴圈邏輯反轉 (Loop Reversal)**：
+  - 將運算核心從「逐一學生跑所有成績」修正為 **「逐一作業跑所有學生」**。
+  - **效益**：確保記憶體中同時只存在單一作業數據，完全杜絕跨作業成績錯置 (Cross-contamination) 風險，並大幅提升運算速度。
+- **🟢 [GradeFlow] UID 生成機制更新**：
+  - 改用 `sheetName + "_" + columnIndex` 作為作業唯一識別碼，解決同名作業導致的 ID 衝突問題。
+- **🔵 [Notifier] 智能日期過濾 (Date Guard)**：
+  - 新增 `startDate` 檢查。掃描缺交時先驗證作業日期，避免誤判未來作業。
+- **🔵 [Notifier] 發信錯誤處理**：
+  - Email 發送功能新增 `try-catch` 機制，若遇額度不足或地址錯誤，系統會回報具體錯誤而非崩潰。
 
-### 🔵 [Notifier] 通知與掃描
-- **智能日期過濾 (Date Guard)**：
-  - 新增 `startDate` 檢查機制。在掃描缺交時，會先驗證作業日期物件，避免將未來的作業或無效日期的欄位誤判為缺交。
-- **發信錯誤處理 (Error Handling)**：
-  - Email 發送功能新增 `try-catch` 機制。若 Gmail 配額不足或地址錯誤，系統會回傳具體錯誤訊息（如 `發送失敗：Error Message`），防止整個排程崩潰。
+## v10.3 - UX & Security Update
+- **🟢 [GradeFlow] 五標視覺化**：前端查詢介面改用「五標方塊」數值呈現 (Bg-slate-50)，取代易誤導的進度條。
+- **🟢 [GradeFlow] 自動登入 (Auto-login)**：引入 `localStorage` 機制，記住使用者座號與憑證。
+- **⚙️ [System] 密碼規範**：確立 `student/parent` + `{{座號補零}}` 的預設密碼規則。
 
----
+## v9.1 - Dual Auth Architecture
+- **⚙️ [System] 資料庫分離**：將 Data Hub 拆分為 `DB_Source` (成績資料) 與 `DB_Auth` (權限資料)，提升安全性。
+- **🟢 [GradeFlow] 雙重驗證**：實作「學生」與「家長」獨立密碼機制。
 
-## v10.3 - 使用者體驗優化 (UX Update)
+## v8.5 - Analytics Dashboard
+- **🟢 [GradeFlow]**：新增全班成績分布圖、五標落點分析、以及前三名 (🥇🥈🥉) 自動排行。
 
-### 🟢 [GradeFlow] 前端查詢
-- **五標視覺化**：將原本的進度條顯示改為清晰的「五標方塊」數值呈現 (Bg-slate-50 風格)。
-- **自動登入 (Auto-login)**：
-  - 新增 `localStorage` 機制，記住使用者的座號與密碼，避免重複輸入。
-- **密碼規範更新**：
-  - 學生預設：`student` + `{{座號補零}}`
-  - 家長預設：`parent` + `{{座號補零}}`
+## v8.0 - Dual Mode (Subject/Homeroom)
+- **🟢 [GradeFlow]**：正式支援「任課模式 (藍色)」與「導師模式 (粉紫)」切換。
+- **⚙️ [System]**：後端資料結構分流 (`subjectClasses` vs `homeroomClasses`)。
 
----
+## v7.0 - The Creator (Automation)
+- **🔵 [Notifier]**：新增 **Creator** 功能，支援 Excel 名單貼上並批次建立試算表。
+- **🔵 [Notifier]**：建立連結管理中心 (`View_Link`)。
 
-## v9.1 - 資安架構升級 (Dual Auth)
-
-### ⚙️ [System] 共同架構
-- **資料庫分離 (DB Separation)**：
-  - 將中繼資料庫拆分為兩個獨立分頁，提升安全性：
-    - `DB_Source`：存放成績資料 JSON (由 GradeFlow 維護，每日覆寫)。
-    - `DB_Auth`：存放權限與密碼表 (永久保存，保留用戶修改紀錄)。
-- **雙重權限驗證**：
-  - 實作「學生/家長」雙密碼機制，兩者權限獨立，避免學生修改密碼導致家長無法登入。
-
----
-
-## v8.5 - 數據分析儀表板 (Analytics)
-
-### 🟢 [GradeFlow] 數據中心
-- **排行功能**：自動計算並顯示單科或總分的前三名 (🥇🥈🥉)。
-- **成績分布圖**：新增五標 (頂/前/均/後/底) 的分布長條圖，快速掌握班級落點。
-- **全班總覽**：新增視覺化圖表介面。
-
----
-
-## v8.0 - 雙軌模式 (Dual Mode)
-
-### 🟢 [GradeFlow] 模式切換
-- **任課/導師模式**：
-  - **任課模式 (Subject)**：藍色系主題，專注於單科成績管理。
-  - **導師模式 (Homeroom)**：粉紫色系主題，整合全科成績與缺勤管理。
-- **資料分流**：後端資料結構分離為 `subjectClasses` 與 `homeroomClasses`。
-
----
-
-## v7.0 - 自動化流程 (The Creator)
-
-### 🔵 [Notifier] 自動化建立
-- **檔案建立器 (Creator)**：
-  - 支援貼上 Excel 名單，批次建立多個班級的成績試算表。
-  - 建立時可直接設定「公開連結」與「小老師 Email」。
-- **連結管理中心**：新增 `View_Link` 頁面，集中管理所有外部試算表連結。
-
----
-
-## v5.0 - 系統整合 (The Merger)
-- **核心合併**：正式將獨立運作的「缺交通知機器人 (Notifier)」與「成績單產生器 (GradeFlow)」整合至單一 GAS 專案中，共用函式庫與設定檔。
-- **UI 重構**：全面導入 Tailwind CSS，統一視覺風格。
+## v5.0 - The Merger
+- **System**: 正式將 `AutomaticHomeworkNotifier` 與 `GradeFlow` 專案合併，共用函式庫與 Tailwind CSS UI 架構。
