@@ -1,0 +1,445 @@
+<script>
+    /**
+     * JS_Dashboard: 處理成績渲染、篩選、趨勢分析
+     */
+
+    let trendChartInstance = null;
+    let currentTrendType = 'score'; // 'score' 或 'rank'
+
+    /**
+     * 定義科目顏色池，確保多線條時顏色固定
+     */
+    const KEYWORD_COLORS = [
+        { regex: /[國语语]/, color: '#ef4444' }, // 紅
+        { regex: /[英外]/,   color: '#3b82f6' }, // 藍
+        { regex: /[數算]/,   color: '#10b981' }, // 綠
+        { regex: /[社史地公]/, color: '#f59e0b' }, // 橘
+        { regex: /[自理化生]/, color: '#8b5cf6' }, // 紫
+    ];
+
+    /**
+     * 2. 定義循環顏色池 (當不符合關鍵字時順序取用)
+     */
+    const PALETTE = ['#06b6d4', '#ec4899', '#84cc16', '#6366f1', '#14b8a6', '#f43f5e', '#78350f'];
+    let subjectColorMap = {}; // 記憶本次登入已分配的科目顏色
+
+    /**
+     * 取得科目的智慧顏色
+     */
+    function getSubjectColor(subName) {
+        if (subjectColorMap[subName]) return subjectColorMap[subName];
+
+        // A. 嘗試關鍵字比對
+        for (let entry of KEYWORD_COLORS) {
+            if (entry.regex.test(subName)) {
+                subjectColorMap[subName] = entry.color;
+                return entry.color;
+            }
+        }
+
+        // B. 若無匹配，從循環色池分配
+        const index = Object.keys(subjectColorMap).length % PALETTE.length;
+        const assignedColor = PALETTE[index];
+        subjectColorMap[subName] = assignedColor;
+        return assignedColor;
+    }
+
+    /**
+     * 切換趨勢圖顯示類型
+     */
+    function toggleTrendType(type) {
+        currentTrendType = type;
+        const btnScore = document.getElementById('btn-trend-score');
+        const btnRank = document.getElementById('btn-trend-rank');
+        const isScore = type === 'score';
+
+        btnScore.className = isScore ? "px-4 py-1.5 rounded-md text-sm font-bold transition-all bg-white text-blue-600 shadow-sm" : "px-4 py-1.5 rounded-md text-sm font-bold transition-all text-slate-500 hover:text-slate-700";
+        btnRank.className = !isScore ? "px-4 py-1.5 rounded-md text-sm font-bold transition-all bg-white text-blue-600 shadow-sm" : "px-4 py-1.5 rounded-md text-sm font-bold transition-all text-slate-500 hover:text-slate-700";
+        
+        renderTrendChart();
+    }
+
+    /**
+     * 繪製趨勢圖表
+     */
+    function renderTrendChart() {
+        const subjectFilter = document.getElementById('filter-subject').value;
+        const canvas = document.getElementById('main-trend-chart');
+        const scrollWrapper = document.getElementById('chart-scroll-wrapper');
+        const isRank = currentTrendType === 'rank';
+
+        // 1. 資料排序：強制依「日期」舊 -> 新
+        let baseData = [...currentViewData].sort((a, b) => {
+            const dateA = a.date || "00/00";
+            const dateB = b.date || "00/00";
+            if (dateA !== dateB) return dateA.localeCompare(dateB);
+            return a.task.localeCompare(b.task); // 日期相同則比對作業名稱
+        });
+
+        if (baseData.length < 2) {
+            document.getElementById('trend-empty').innerText = "數據不足以繪製趨勢";
+            document.getElementById('trend-empty').classList.remove('hidden');
+            if(trendChartInstance) trendChartInstance.destroy();
+            document.getElementById('chart-legend-container').innerHTML = ""; // 清空圖例
+            return;
+        } else {
+            document.getElementById('trend-empty').classList.add('hidden');
+        }
+
+        // 2. 建立 X 軸標籤 (日期 + 作業名)
+        // 為了避免標籤重複，我們建立一個 uniqueLabels 對照表
+        const labels = baseData.map(d => `${d.date}\n${d.task}`);
+        
+        // 3. 動態寬度計算 (實現捲動)
+        // 每個資料點給 60px 寬度，如果總寬度小於容器，則用 100%
+        const minPointWidth = 60;
+        const requiredWidth = labels.length * minPointWidth;
+        const containerWidth = canvas.parentElement.parentElement.clientWidth; // 取得外層寬度
+        
+        scrollWrapper.style.width = `${Math.max(requiredWidth, containerWidth)}px`;
+
+        // 4. 準備 Dataset
+        let datasets = [];
+        const subjects = (subjectFilter === 'all') ? [...new Set(baseData.map(d => d.subject))] : [subjectFilter];
+        
+        subjects.forEach(sub => {
+            const color = getSubjectColor(sub);
+            // 對齊資料點：如果該次作業是本科目則填值，否則填 null
+            const dataPoints = baseData.map(d => {
+                return (d.subject === sub) ? (isRank ? d.rank : d.score) : null;
+            });
+
+            datasets.push({
+                label: sub,
+                data: dataPoints,
+                borderColor: color,
+                backgroundColor: color,
+                borderWidth: 3,
+                tension: 0.1, // 線條稍微直一點，避免誤導
+                pointRadius: 5,
+                pointHoverRadius: 7,
+                spanGaps: true // ★ 關鍵：允許跨越 null 連線 (自動連接同一科目的成績)
+            });
+        });
+
+        if(trendChartInstance) trendChartInstance.destroy();
+
+        const ctx = canvas.getContext('2d');
+        trendChartInstance = new Chart(ctx, {
+            type: 'line',
+            data: { 
+                labels: baseData.map(d => d.date || "-"), // X軸只顯示日期，Tooltip 再顯示作業名
+                datasets: datasets 
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                interaction: { mode: 'index', intersect: false },
+                plugins: {
+                    legend: { display: false }, // ★ 關閉內建圖例
+                    tooltip: {
+                        callbacks: {
+                            title: function(tooltipItems) {
+                                const index = tooltipItems[0].dataIndex;
+                                const item = baseData[index];
+                                return `${item.date} - ${item.task}`;
+                            },
+                            label: function(context) {
+                                let label = context.dataset.label || '';
+                                if (label) label += ': ';
+                                label += isRank ? `第 ${context.parsed.y} 名` : `${context.parsed.y} 分`;
+                                return label;
+                            }
+                        }
+                    }
+                },
+                scales: {
+                    y: {
+                        reverse: isRank,
+                        beginAtZero: !isRank,
+                        max: isRank ? undefined : 100,
+                        grid: { borderDash: [2, 2], color: '#f1f5f9' }
+                    },
+                    x: {
+                        grid: { display: false },
+                        ticks: { autoSkip: false, maxRotation: 0 } // 強制顯示所有標籤
+                    }
+                }
+            }
+        });
+
+        // 5. 生成外部固定圖例
+        generateCustomLegend(trendChartInstance);
+    }
+    function generateCustomLegend(chart) {
+        const container = document.getElementById('chart-legend-container');
+        container.innerHTML = "";
+
+        chart.data.datasets.forEach((dataset, index) => {
+            const btn = document.createElement('button');
+            const isHidden = !chart.isDatasetVisible(index);
+            
+            btn.className = `flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-bold border transition-all ${isHidden ? 'bg-slate-50 text-slate-400 border-slate-200' : 'bg-white text-slate-700 border-slate-200 shadow-sm'}`;
+            
+            // 顏色球
+            const dot = document.createElement('span');
+            dot.className = "w-3 h-3 rounded-full";
+            dot.style.backgroundColor = isHidden ? '#cbd5e1' : dataset.backgroundColor;
+            
+            // 文字
+            const text = document.createElement('span');
+            text.innerText = dataset.label;
+            if(isHidden) text.style.textDecoration = "line-through";
+
+            btn.appendChild(dot);
+            btn.appendChild(text);
+
+            // 點擊事件
+            btn.onclick = () => {
+                chart.setDatasetVisibility(index, !chart.isDatasetVisible(index));
+                chart.update();
+                generateCustomLegend(chart); // 重新渲染按鈕狀態
+            };
+
+            container.appendChild(btn);
+        });
+    }
+    
+    /**
+     * 修改原本的 applyFilters，在結尾呼叫圖表更新
+     */
+    function applyFilters() {
+        const search = document.getElementById('filter-search').value.toLowerCase();
+        const subject = document.getElementById('filter-subject').value;
+        const sortMode = document.getElementById('sort-mode').value;
+
+        currentViewData = cachedPayload.filter(item => {
+            return ((item.task||"").toLowerCase().includes(search) || (item.subject||"").toLowerCase().includes(search)) &&
+                   ((subject === 'all') || (item.subject === subject));
+        });
+
+        // 列表排序 (不影響圖表，圖表內部會自訂排序)
+        currentViewData.sort((a, b) => {
+            if(sortMode === 'date-desc') return (b.date||"").localeCompare(a.date||"");
+            if(sortMode === 'score-desc') return b.score - a.score;
+            if(sortMode === 'score-asc') return a.score - b.score;
+            return 0;
+        });
+
+        const grid = document.getElementById('view-grid');
+        grid.innerHTML = "";
+        const tbody = document.getElementById('table-body');
+        tbody.innerHTML = "";
+        
+        if(currentViewData.length === 0) {
+            document.getElementById('empty-state').classList.remove('hidden');
+        } else {
+            document.getElementById('empty-state').classList.add('hidden');
+            currentViewData.forEach((r, idx) => {
+                grid.appendChild(createScoreCard(r, idx));
+                tbody.appendChild(createTableRow(r, idx));
+            });
+        }
+
+        renderTrendChart(); // 更新多科趨勢圖
+    }
+
+    // --- 其餘 calcGlobalStats, createScoreCard, createTableRow 等函式保持不變 ---
+    // (請參照第一階段已提供的完整代碼)
+
+    function calcGlobalStats() {
+        const area = document.getElementById('global-stats-area');
+        area.innerHTML = "";
+        const totalSum = cachedPayload.reduce((a, b) => a + b.score, 0);
+        const totalAvg = cachedPayload.length ? (totalSum / cachedPayload.length).toFixed(1) : "0.0";
+        
+        const subjects = {};
+        cachedPayload.forEach(r => {
+            if(!subjects[r.subject]) subjects[r.subject] = { sum: 0, count: 0 };
+            subjects[r.subject].sum += r.score;
+            subjects[r.subject].count++;
+        });
+
+        area.innerHTML += `
+            <div class="bg-white/10 backdrop-blur-sm border border-white/20 rounded-lg px-4 py-2 flex flex-col justify-center min-w-[100px]">
+                <div class="text-[10px] text-slate-300 font-bold uppercase">總平均</div>
+                <div class="text-2xl font-black text-white">${totalAvg}</div>
+            </div>
+        `;
+
+        Object.keys(subjects).forEach(sub => {
+            const avg = (subjects[sub].sum / subjects[sub].count).toFixed(1);
+            area.innerHTML += `
+                <div class="bg-white/5 border border-white/10 rounded-lg px-3 py-2 flex flex-col justify-center min-w-[80px]">
+                    <div class="text-[10px] text-slate-400 font-bold uppercase truncate max-w-[80px]">${sub}</div>
+                    <div class="text-lg font-bold text-slate-200">${avg}</div>
+                </div>
+            `;
+        });
+    }
+
+    function switchView(mode) {
+        if(mode === 'grid') {
+            document.getElementById('view-grid').classList.remove('hidden');
+            document.getElementById('view-table').classList.add('hidden');
+            document.getElementById('btn-view-grid').className = "px-3 py-1.5 rounded-md text-blue-600 bg-white shadow-sm text-sm transition-all";
+            document.getElementById('btn-view-table').className = "px-3 py-1.5 rounded-md text-slate-400 hover:text-slate-600 text-sm transition-all";
+        } else {
+            document.getElementById('view-grid').classList.add('hidden');
+            document.getElementById('view-table').classList.remove('hidden');
+            document.getElementById('btn-view-table').className = "px-3 py-1.5 rounded-md text-blue-600 bg-white shadow-sm text-sm transition-all";
+            document.getElementById('btn-view-grid').className = "px-3 py-1.5 rounded-md text-slate-400 hover:text-slate-600 text-sm transition-all";
+        }
+    }
+
+    function createScoreCard(r, index) {
+        const el = document.createElement('div');
+        el.className = "bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden hover:shadow-lg transition-all duration-300 group cursor-pointer relative";
+        el.onclick = function() { openAnalysisModalByIndex(index); };
+
+        let scoreClass = r.score >= 90 ? "text-emerald-600 bg-emerald-50" : (r.score < 60 ? "text-red-500 bg-red-50" : "text-slate-700 bg-slate-100");
+        let rankBadge = r.rank <= 3 ? `<i class="fa-solid fa-crown text-amber-400 ml-1"></i>` : "";
+
+        let fiveHtml = "";
+        let distHtml = "";
+        
+        if(r.stats && r.stats.five) {
+            const f = r.stats.five; 
+            const blocks = [
+                { label: '底', val: f.bottom, cls: 'val-bottom' },
+                { label: '後', val: f.back,   cls: 'val-back' },
+                { label: '均', val: f.avg,    cls: 'val-avg' },
+                { label: '前', val: f.front,  cls: 'val-front' },
+                { label: '頂', val: f.top,    cls: 'val-top' }
+            ];
+
+            const blockHtml = blocks.map(b => `
+                <div class="${b.cls} border rounded p-1 flex flex-col items-center justify-center min-h-[44px]">
+                    <span class="text-[9px] font-bold opacity-70 uppercase tracking-tighter leading-none mb-0.5">${b.label}</span>
+                    <span class="text-sm font-black leading-none">${formatNum(b.val)}</span>
+                </div>
+            `).join('');
+
+            fiveHtml = `<div class="mt-4 pt-3 border-t border-slate-100"><div class="grid grid-cols-5 gap-1.5 text-center">${blockHtml}</div></div>`;
+
+            const chartId = `chart-${Math.random().toString(36).substr(2, 9)}`;
+            distHtml = `<div class="mt-3 px-1 pointer-events-none"><div class="h-12 w-full relative"><canvas id="${chartId}"></canvas></div></div>`;
+            setTimeout(() => renderMiniChart(chartId, r.stats.dist, r.score), 100);
+        }
+
+        el.innerHTML = `
+            <div class="p-5 pointer-events-none">
+                <div class="flex justify-between items-start mb-2">
+                    <div>
+                        <span class="bg-slate-100 text-slate-500 text-[10px] px-2 py-1 rounded-full font-bold uppercase tracking-wider border border-slate-200">${r.subject}</span>
+                        <h3 class="font-bold text-lg text-slate-700 leading-tight mt-2">${r.task}</h3>
+                        <div class="text-xs text-slate-400 mt-1 flex items-center">
+                            <i class="fa-regular fa-calendar mr-1"></i>${r.date || '-'}
+                            <span class="mx-2 text-slate-200">|</span>
+                            <span class="font-mono">#${r.rank}</span> 名 ${rankBadge}
+                        </div>
+                    </div>
+                    <div class="${scoreClass} w-16 h-16 rounded-2xl flex flex-col items-center justify-center shadow-inner border border-black/5">
+                         <span class="text-2xl font-black">${formatNum(r.score)}</span>
+                         <span class="text-[10px] font-bold opacity-60">SCORE</span>
+                    </div>
+                </div>
+                ${fiveHtml}
+                ${distHtml}
+            </div>
+        `;
+        return el;
+    }
+
+    function createTableRow(r, index) {
+        const tr = document.createElement('tr');
+        tr.className = "hover:bg-slate-50 transition-colors border-b border-slate-50 last:border-0 cursor-pointer";
+        tr.onclick = function() { openAnalysisModalByIndex(index); };
+        let scoreClass = r.score < 60 ? "text-red-500 font-bold" : "text-slate-700 font-bold";
+        tr.innerHTML = `
+            <td class="p-4">
+                <div class="font-bold text-slate-700">${r.task}</div>
+                <div class="text-xs text-slate-400 mt-0.5"><span class="bg-slate-100 px-1.5 rounded mr-1">${r.subject}</span> ${r.sheet}</div>
+            </td>
+            <td class="p-4 text-slate-500 text-xs font-mono">${r.date || '-'}</td>
+            <td class="p-4 text-center text-slate-600 font-mono">#${r.rank}</td>
+            <td class="p-4 text-center ${scoreClass} text-lg">${formatNum(r.score)}</td>
+            <td class="p-4 text-center">
+                <button class="text-blue-500 hover:text-blue-700 bg-blue-50 hover:bg-blue-100 p-2 rounded-full transition-colors"><i class="fa-solid fa-chart-simple"></i></button>
+            </td>
+        `;
+        return tr;
+    }
+
+    function openAnalysisModalByIndex(index) {
+        const item = currentViewData[index];
+        if(!item) return;
+
+        document.getElementById('analysis-modal').classList.remove('hidden');
+        document.getElementById('an-task').innerText = item.task;
+        document.getElementById('an-sub').innerText = `${item.subject} / ${item.sheet}`;
+        document.getElementById('an-avg').innerText = formatNum(item.stats.avg);
+        document.getElementById('an-max').innerText = formatNum(item.stats.max);
+        document.getElementById('an-min').innerText = formatNum(item.stats.min);
+        
+        document.getElementById('an-p12').innerText = formatNum(item.stats.five.bottom);
+        document.getElementById('an-p25').innerText = formatNum(item.stats.five.back);
+        document.getElementById('an-p50').innerText = formatNum(item.stats.five.avg);
+        document.getElementById('an-p75').innerText = formatNum(item.stats.five.front);
+        document.getElementById('an-p88').innerText = formatNum(item.stats.five.top);
+
+        const myScore = Number(item.score);
+        const ctx = document.getElementById('an-chart').getContext('2d');
+        if(currentChart) currentChart.destroy();
+        
+        const labels = ['<60', '60-69', '70-79', '80-89', '90-99', '100'];
+        const data = [item.stats.dist['below60'], item.stats.dist['60-69'], item.stats.dist['70-79'], item.stats.dist['80-89'], item.stats.dist['90-99'], item.stats.dist['100']];
+        
+        const bgColors = data.map((v, i) => {
+           if(i===0 && myScore < 60) return '#f87171';
+           if(i===1 && myScore >= 60 && myScore < 70) return '#fb923c';
+           if(i===2 && myScore >= 70 && myScore < 80) return '#34d399';
+           if(i===3 && myScore >= 80 && myScore < 90) return '#60a5fa';
+           if(i===4 && myScore >= 90 && myScore < 100) return '#a78bfa';
+           if(i===5 && myScore === 100) return '#7c3aed';
+           return '#e2e8f0';
+        });
+
+        currentChart = new Chart(ctx, {
+            type: 'bar',
+            data: { labels: labels, datasets: [{ data: data, backgroundColor: bgColors, borderRadius: 4 }] },
+            options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { y: { display: false, beginAtZero: true }, x: { grid: { display: false }, ticks: { font: { size: 10 } } } } }
+        });
+    }
+
+    function renderMiniChart(id, dist, myScore) {
+       const ctx = document.getElementById(id).getContext('2d');
+       const data = [dist['below60'], dist['60-69'], dist['70-79'], dist['80-89'], dist['90-99'], dist['100']];
+       const colors = data.map((v, i) => {
+           if(i===0 && myScore < 60) return '#f87171';
+           if(i===1 && myScore >= 60 && myScore < 70) return '#fb923c';
+           if(i===2 && myScore >= 70 && myScore < 80) return '#34d399';
+           if(i===3 && myScore >= 80 && myScore < 90) return '#60a5fa';
+           if(i===4 && myScore >= 90 && myScore < 100) return '#a78bfa';
+           if(i===5 && myScore === 100) return '#7c3aed';
+           return '#cbd5e1'; 
+       });
+       new Chart(ctx, {
+           type: 'bar',
+           data: { labels: ['','','','','',''], datasets: [{ data: data, backgroundColor: colors, borderRadius: 2 }] },
+           options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false }, tooltip: { enabled: false } }, scales: { y: { display: false }, x: { display: false } } }
+       });
+    }
+
+    function openPwdModal() { document.getElementById('pwd-modal').classList.remove('hidden'); document.getElementById('new-pwd').value = ""; }
+    function doChangePwd() {
+        const newPwd = document.getElementById('new-pwd').value.trim();
+        if(!newPwd) return alert("請輸入新密碼");
+        const btn = document.getElementById('btn-chg-pwd'); btn.innerText = "處理中..."; btn.disabled = true;
+        google.script.run.withSuccessHandler(res => {
+            btn.innerText = "確認修改"; btn.disabled = false;
+            if(res.success) { alert("修改成功！請重新登入"); logout(); }
+            else { alert(res.msg); }
+        }).apiChangePassword(currentUser.seat, currentUser.pwd, newPwd);
+    }
+</script>

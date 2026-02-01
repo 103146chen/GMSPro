@@ -1,0 +1,212 @@
+<script>
+  // 全域資料結構
+  let appData = { 
+     mode: 'subject', // 'subject' (任課) 或 'homeroom' (導師)
+     subjectClasses: [], // 任課班級清單
+     homeroomClasses: [], // 導師科目清單
+     
+     // Getter: 根據模式取得當前清單
+     get classes() {
+        return this.mode === 'homeroom' ? this.homeroomClasses : this.subjectClasses;
+     },
+     set classes(val) {
+        if(this.mode === 'homeroom') this.homeroomClasses = val;
+        else this.subjectClasses = val;
+     },
+     
+     currentClass: null, 
+     templates: {}, 
+     pendingFiles: [] 
+  };
+
+  let batchData = { type: '', list: [], currentIndex: 0, sheetName: '' };
+  let reportRawData = { full: [], headers: [], selectedCols: [] };
+
+  window.onload = function() {
+    switchView('dashboard');
+    refreshAppData();
+    loadTemplates(); 
+    updateModeUI(); // 初始化 UI 狀態
+  };
+
+  function switchView(view) {
+    document.querySelectorAll('.view-section').forEach(el => el.classList.add('hidden'));
+    const targetEl = document.getElementById('view-' + view);
+    if(targetEl) targetEl.classList.remove('hidden');
+    
+    // 更新 Sidebar 狀態
+    document.querySelectorAll('.nav-btn').forEach(btn => btn.classList.remove('bg-slate-800', 'text-blue-400', 'font-semibold', 'shadow-inner'));
+    
+    // ★★★ 修改：根據目前模式判斷要高亮哪一個儀表板按鈕 ★★★
+    if (view === 'dashboard') {
+        const dashBtnId = appData.mode === 'homeroom' ? 'nav-dash-homeroom' : 'nav-dash-subject';
+        const activeBtn = document.getElementById(dashBtnId);
+        if(activeBtn) activeBtn.classList.add('bg-slate-800', 'text-blue-400', 'font-semibold', 'shadow-inner');
+    } else {
+        const activeBtn = document.getElementById('nav-' + view);
+        if(activeBtn) activeBtn.classList.add('bg-slate-800', 'text-blue-400', 'font-semibold', 'shadow-inner');
+    }
+
+    if (view === 'create_batch' && typeof checkBatchTableInit === 'function') checkBatchTableInit();
+   }
+
+  // === v8.0 核心更新：讀取雙軌資料 ===
+  function refreshAppData() {
+    google.script.run.withSuccessHandler(data => {
+      // 接收後端回傳的 { subject: [], homeroom: [] }
+      appData.subjectClasses = data.subject || [];
+      appData.homeroomClasses = data.homeroom || [];
+      
+      // 更新各個 View
+      if(typeof renderSettingsList === 'function') renderSettingsList();
+      if(typeof renderDashboardPicker === 'function') renderDashboardPicker();
+      if(typeof loadDbConfig === 'function') loadDbConfig();
+      
+    }).initAppData();
+  }
+
+  // === v8.0 核心更新：模式切換 (修正版) ===
+  function switchMode(newMode) {
+     if(appData.mode === newMode) return;
+     
+     // 切換模式
+     appData.mode = newMode;
+     appData.currentClass = null; // 清空當前選擇
+     
+     // 更新 UI 視覺
+     updateModeUI();
+     
+     // 強制回到儀表板並重置
+     switchView('dashboard');
+     if(typeof showDashboardPicker === 'function') showDashboardPicker();
+     
+     // ★★★ 關鍵修正：切換模式後，強制儀表板重畫 (更新標題與卡片) ★★★
+     if(typeof renderDashboardPicker === 'function') renderDashboardPicker();
+
+     // 重新渲染設定頁
+     if(typeof renderSettingsList === 'function') renderSettingsList();
+     
+     showToast("模式切換", `已切換至「${newMode === 'homeroom' ? '導師' : '任課'}」模式`, "success",1000);
+  }
+  
+  function updateModeUI() {
+     const isHome = appData.mode === 'homeroom';
+     
+     // Sidebar 按鈕樣式
+     const btnSubject = document.getElementById('mode-btn-subject');
+     const btnHomeroom = document.getElementById('mode-btn-homeroom');
+     
+     if(btnSubject && btnHomeroom) {
+         if(isHome) {
+             btnHomeroom.classList.add('bg-pink-600', 'text-white', 'shadow-lg');
+             btnHomeroom.classList.remove('bg-slate-800', 'text-slate-400');
+             
+             btnSubject.classList.add('bg-slate-800', 'text-slate-400');
+             btnSubject.classList.remove('bg-blue-600', 'text-white', 'shadow-lg');
+         } else {
+             btnSubject.classList.add('bg-blue-600', 'text-white', 'shadow-lg');
+             btnSubject.classList.remove('bg-slate-800', 'text-slate-400');
+             
+             btnHomeroom.classList.add('bg-slate-800', 'text-slate-400');
+             btnHomeroom.classList.remove('bg-pink-600', 'text-white', 'shadow-lg');
+         }
+     }
+     
+     // 替換全域的「班級」字眼為「科目」 (當在導師模式時)
+     document.querySelectorAll('.lbl-class-name').forEach(el => {
+         el.innerText = isHome ? "科目名稱" : "班級代號";
+     });
+     
+     // 設定頁面的標題變化
+     const linkTitle = document.getElementById('settings-link-title');
+     if(linkTitle) linkTitle.innerText = isHome ? "科目連結管理 (導師班)" : "班級連結管理 (任課班)";
+  }
+
+  // Modal Logic (維持不變)
+  function openModal() {
+    document.getElementById('preview-modal').classList.remove('hidden');
+    document.getElementById('modal-title').innerText = batchData.type === 'missing' ? "缺交通知預覽" : "成績單預覽";
+    document.getElementById('modal-count').innerText = batchData.list.length;
+    const cc = appData.currentClass.cc;
+    const ccInd = document.getElementById('cc-indicator');
+    if(cc) { ccInd.classList.remove('hidden'); ccInd.innerText = `CC: ${cc}`; } else { ccInd.classList.add('hidden'); }
+    const subInp = document.getElementById('modal-input-sub');
+    const bodInp = document.getElementById('modal-input-body');
+    if(batchData.type === 'missing') {
+       subInp.value = appData.templates.missingSubject;
+       bodInp.value = appData.templates.missingBody;
+    } else {
+       subInp.value = appData.templates.reportSubject;
+       bodInp.value = appData.templates.reportBody;
+    }
+    const listEl = document.getElementById('modal-list'); listEl.innerHTML = "";
+    batchData.list.forEach((s, i) => {
+      const div = document.createElement('div'); div.className = `p-3 border-b cursor-pointer hover:bg-blue-50 text-sm ${i===0?'bg-blue-100 border-l-4 border-blue-500':''}`;
+      div.id = `modal-item-${i}`; div.onclick = () => { batchData.currentIndex = i; renderModalPreview(); updateListActive(); };
+      div.innerHTML = `<div class="font-bold">${s._seatNo || s.seatNo} ${s._name || s.name}</div><div class="text-xs text-slate-500 truncate">${s._email || s.email}</div>`; listEl.appendChild(div);
+    });
+    batchData.currentIndex = 0; renderModalPreview();
+  }
+  function closeModal() { document.getElementById('preview-modal').classList.add('hidden'); }
+  function updateListActive() { document.querySelectorAll('#modal-list > div').forEach((el, i) => { el.className = `p-3 border-b cursor-pointer hover:bg-blue-50 text-sm ${i===batchData.currentIndex?'bg-blue-100 border-l-4 border-blue-500':''}`; }); }
+  function changeModalPreview(d) { let next = batchData.currentIndex + d; if(next >= 0 && next < batchData.list.length) { batchData.currentIndex = next; renderModalPreview(); updateListActive(); document.getElementById(`modal-item-${next}`).scrollIntoView({block: 'nearest'}); } }
+  function renderModalPreview() {
+     const s = batchData.list[batchData.currentIndex];
+     let rawSub = document.getElementById('modal-input-sub').value;
+     let rawBody = document.getElementById('modal-input-body').value;
+     let subject = "", html = "";
+     if (batchData.type === 'missing') {
+        subject = rawSub.replace('{{姓名}}', s.name);
+        let warnHtml = "", expHtml = "";
+        const headerRow = '<tr style="background:#fff7ed; text-align:left;"><th style="padding:8px;color:#c2410c">日期</th><th style="padding:8px;color:#c2410c">作業名稱</th><th style="padding:8px;color:#c2410c">狀態</th></tr>';
+        if (s.warnings && s.warnings.length > 0) {
+           const rows = s.warnings.map(item => `<tr><td style="padding:6px;border-bottom:1px solid #eee;">${item.date}</td><td style="padding:6px;border-bottom:1px solid #eee;font-weight:bold;">${item.task}</td><td style="padding:6px;border-bottom:1px solid #eee;color:#d97706;font-weight:bold;">${item.status}</td></tr>`).join('');
+           warnHtml = `<div style="margin-bottom:20px;"><div style="background:#fff7ed;color:#9a3412;padding:8px;font-weight:bold;font-size:14px;border-left:4px solid #f97316;">⚠️ 尚未繳交 (請盡速補交)</div><table style="width:100%;font-size:14px;border-collapse:collapse;margin-top:5px;">${headerRow}${rows}</table></div>`;
+        }
+        if (s.expired && s.expired.length > 0) {
+           const rows = s.expired.map(item => `<tr><td style="padding:6px;border-bottom:1px solid #eee;color:#999;">${item.date}</td><td style="padding:6px;border-bottom:1px solid #eee;color:#999;">${item.task}</td><td style="padding:6px;border-bottom:1px solid #eee;color:#dc2626;">${item.status}</td></tr>`).join('');
+           expHtml = `<div style="margin-bottom:10px;"><div style="background:#f3f4f6;color:#666;padding:8px;font-weight:bold;font-size:14px;border-left:4px solid #999;">❌ 已逾期 (無法補交)</div><table style="width:100%;font-size:14px;border-collapse:collapse;margin-top:5px;">${headerRow}${rows}</table></div>`;
+        }
+        let body = rawBody.replace('{{姓名}}', s.name).replace('{{分頁名稱}}', "").replace('{{缺交列表}}', warnHtml).replace('{{逾期列表}}', expHtml).replace(/\n/g, '<br>');
+        html = `<div style="padding:20px; background:#fff7ed; font-family:sans-serif;"><div style="background:#fff; border:1px solid #fed7aa; border-radius:8px; overflow:hidden;"><div style="background:#f97316; color:white; padding:12px; text-align:center; font-weight:bold;">${subject}</div><div style="padding:20px; color:#333; line-height:1.6;">${body}</div></div></div>`;
+     } else {
+        subject = rawSub.replace('{{姓名}}', s._name);
+        const cols = reportRawData.selectedCols;
+        const tableHeader = cols.map(c=>`<th style="border:1px solid #999;padding:8px;">${c}</th>`).join('');
+        const tableBody = cols.map(c=> { let v = s[c]===undefined?'':s[c]; let st = "border:1px solid #999;padding:10px;text-align:center;"; if(typeof v==='number'&&v<60) st+="color:red;font-weight:bold;"; return `<td style="${st}">${v}</td>`; }).join('');
+        const tableHtml = `<table style="width:100%;border-collapse:collapse;border:2px solid #444;"><tr style="background:#dbeafe;">${tableHeader}</tr><tr>${tableBody}</tr></table>`;
+        let body = rawBody.replace('{{姓名}}', s._name).replace('{{成績表格}}', tableHtml).replace(/\n/g, '<br>');
+        html = `<div style="padding:20px; background:#eff6ff; font-family:sans-serif;"><div style="background:#fff; border-radius:8px; overflow:hidden; box-shadow:0 2px 4px rgba(0,0,0,0.1);"><div style="background:#2563eb; color:white; padding:12px; text-align:center; font-weight:bold;">${subject}</div><div style="padding:20px; color:#333; line-height:1.6;">${body}</div></div></div>`;
+     }
+     document.getElementById('modal-email-preview').innerHTML = html;
+  }
+  async function confirmSendBatch() {
+     if(!confirm("確定要發送這 " + batchData.list.length + " 封信嗎？")) return;
+     const btn = document.getElementById('btn-modal-send'); btn.innerText = "發送中..."; btn.disabled = true;
+     const cc = appData.currentClass.cc; let count = 0;
+     const finalSubTpl = document.getElementById('modal-input-sub').value;
+     for (const s of batchData.list) {
+        batchData.currentIndex = batchData.list.indexOf(s); renderModalPreview(); 
+        const finalHtml = document.getElementById('modal-email-preview').innerHTML;
+        let sub = batchData.type==='missing' ? finalSubTpl.replace('{{姓名}}', s.name) : finalSubTpl.replace('{{姓名}}', s._name);
+        const email = s._email || s.email;
+        await new Promise(r => google.script.run.withSuccessHandler(r).sendEmailDirect(email, sub, finalHtml, cc));
+        count++; btn.innerText = `發送中 (${count}/${batchData.list.length})`;
+     }
+     showToast("完成", "全數發送完畢", "success",1000); closeModal(); btn.innerText = "確認發送所有信件"; btn.disabled = false;
+  }
+
+  function switchModeAndDash(targetMode) {
+    // 1. 切換模式
+    appData.mode = targetMode;
+    appData.currentClass = null;
+    updateModeUI(); // 更新全域 UI (如顏色)
+
+    // 2. 切換到儀表板視圖
+    switchView('dashboard');
+    
+    // 3. 強制重繪儀表板內容 (確保顯示正確的班級列表)
+    if(typeof showDashboardPicker === 'function') showDashboardPicker();
+    if(typeof renderDashboardPicker === 'function') renderDashboardPicker();
+}
+</script>

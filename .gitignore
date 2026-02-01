@@ -1,0 +1,9 @@
+# Google Clasp 設定檔 (會自動忽略所有子資料夾內的此檔案)
+.clasp.json
+.google-oauth-token
+creds.json
+
+# 備份與雜項
+_backup/
+node_modules/
+.DS_Store

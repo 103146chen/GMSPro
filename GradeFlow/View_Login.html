@@ -1,0 +1,34 @@
+<div id="login-card" class="hidden w-full max-w-md bg-white p-8 rounded-2xl shadow-xl border border-slate-200 animate-fade-in mt-10 mx-auto">
+  <div class="text-center mb-8">
+      <div class="w-16 h-16 bg-gradient-to-tr from-blue-500 to-indigo-600 text-white rounded-2xl flex items-center justify-center text-3xl mx-auto mb-4 shadow-blue-200 shadow-xl transform rotate-3">
+          <i class="fa-solid fa-graduation-cap"></i>
+      </div>
+      <h2 class="text-2xl font-bold text-slate-800">成績查詢登入</h2>
+      <p class="text-slate-400 mt-2 text-sm">請輸入您的座號與專屬密碼</p>
+  </div>
+  
+  <div class="space-y-4">
+    <div class="relative">
+        <i class="fa-solid fa-hashtag absolute left-4 top-4 text-slate-400"></i>
+        <input id="inp-seat" type="number" class="w-full border border-slate-200 bg-slate-50 p-3 pl-10 rounded-lg text-lg font-bold outline-none focus:bg-white focus:ring-2 focus:ring-blue-500 transition-all" placeholder="座號">
+    </div>
+    
+    <div class="relative">
+        <i class="fa-solid fa-key absolute left-4 top-4 text-slate-400"></i>
+        <input id="inp-pwd" type="password" class="w-full border border-slate-200 bg-slate-50 p-3 pl-10 rounded-lg text-lg outline-none focus:bg-white focus:ring-2 focus:ring-blue-500 transition-all" placeholder="密碼">
+    </div>
+
+    <div class="flex items-center px-1">
+        <label class="flex items-center cursor-pointer group">
+            <input type="checkbox" id="chk-remember" class="w-4 h-4 text-blue-600 rounded border-slate-300 focus:ring-blue-500 cursor-pointer">
+            <span class="ml-2 text-sm text-slate-500 group-hover:text-slate-700 transition-colors select-none">記住座號與密碼 (下次自動登入)</span>
+        </label>
+    </div>
+
+    <button onclick="doLogin()" id="btn-login" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 rounded-lg shadow-lg active:scale-95 transition-all text-lg mt-2">
+        登 入
+    </button>
+  </div>
+  
+  <div id="msg-area" class="mt-4 text-center text-sm font-bold text-red-500 min-h-[20px]"></div>
+</div>

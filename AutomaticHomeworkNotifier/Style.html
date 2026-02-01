@@ -1,0 +1,22 @@
+<style>
+  /* UI Utilities */
+  ::-webkit-scrollbar { width: 8px; }
+  ::-webkit-scrollbar-track { background: #f1f1f1; }
+  ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
+  
+  .loader { border: 3px solid #f3f3f3; border-top: 3px solid #3b82f6; border-radius: 50%; width: 20px; height: 20px; animation: spin 1s linear infinite; }
+  @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+  
+  .custom-scrollbar::-webkit-scrollbar-thumb { background-color: #94a3b8; }
+  
+  .modal-enter { opacity: 0; transform: scale(0.95); }
+  .modal-enter-active { opacity: 1; transform: scale(1); transition: opacity 0.2s, transform 0.2s; }
+
+  /* Tag Input Styles */
+  .tag-container { display: flex; flex-wrap: wrap; gap: 4px; padding: 4px; border: 1px solid #e2e8f0; border-radius: 6px; background: #fff; min-height: 42px; align-items: center; }
+  .tag-container:focus-within { border-color: #a855f7; box-shadow: 0 0 0 2px rgba(168, 85, 247, 0.2); }
+  .tag-chip { background: #eff6ff; color: #1e40af; padding: 2px 8px; border-radius: 999px; font-size: 12px; font-weight: bold; display: flex; align-items: center; gap: 4px; border: 1px solid #bfdbfe; white-space: nowrap; }
+  .tag-chip button { color: #60a5fa; cursor: pointer; font-size: 14px; line-height: 1; }
+  .tag-chip button:hover { color: #1d4ed8; }
+  .tag-input { border: none; outline: none; flex: 1; min-width: 60px; font-size: 13px; padding: 4px; }
+</style>

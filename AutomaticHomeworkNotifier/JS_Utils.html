@@ -1,0 +1,57 @@
+<script>
+    // 定義全域計時器 ID
+    let toastTimer = null;
+
+    // Toast 通知 (終極修正版：加入透明度變化)
+    function showToast(title, msg, type, duration) {
+      const t = document.getElementById('toast');
+      
+      // 1. 清除舊計時器
+      if (toastTimer) {
+        clearTimeout(toastTimer);
+        toastTimer = null;
+      }
+
+      // 2. 設定內容
+      document.getElementById('toastTitle').innerText = title;
+      document.getElementById('toastMsg').innerHTML = msg;
+      
+      // 3. 設定顯示狀態 (重置 Class)
+      // 加入 opacity-100 確保顯示時是不透明的
+      t.className = `fixed top-20 right-8 bg-white border-l-4 shadow-lg rounded-md px-6 py-4 transition-all duration-500 z-50 max-w-sm transform translate-x-0 opacity-100 ${type==='error'?'border-red-500':type==='success'?'border-green-500':'border-blue-500'}`;
+      
+      // 4. 設定收回排程
+      const time = duration || 3000;
+      toastTimer = setTimeout(() => { 
+          // ★★★ 關鍵修正：同時使用 位移 + 透明度 + 穿透點擊 ★★★
+          t.classList.remove('translate-x-0', 'opacity-100'); 
+          t.classList.add('translate-x-full', 'opacity-0', 'pointer-events-none'); 
+      }, time);
+    }
+
+    // === Tag Input 共用邏輯 (v7.1) ===
+    function focusTagInput(container) { container.querySelector('input').focus(); }
+    
+    function handleTagKey(e) {
+      const input = e.target; 
+      const container = input.parentElement; 
+      const val = input.value.trim();
+      
+      if (e.key === 'Enter' || e.key === ',') { 
+        e.preventDefault(); 
+        if (val) { addTag(container, val); input.value = ""; } 
+      }
+      else if (e.key === 'Backspace' && val === "") { 
+        const tags = container.querySelectorAll('.tag-chip'); 
+        if (tags.length > 0) { tags[tags.length - 1].remove(); } 
+      }
+    }
+    
+    function addTag(container, text) {
+      const chip = document.createElement('div'); 
+      chip.className = "tag-chip animate-[fadeIn_0.2s_ease-out]"; 
+      chip.dataset.val = text; 
+      chip.innerHTML = `<span>${text}</span><button onclick="this.parentElement.remove()"><i class="fa-solid fa-xmark"></i></button>`; 
+      container.insertBefore(chip, container.querySelector('input'));
+    }
+</script>

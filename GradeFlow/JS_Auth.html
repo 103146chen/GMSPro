@@ -1,0 +1,76 @@
+<script>
+    /**
+     * JS_Auth: 處理登入、登出與 localStorage 記憶功能
+     */
+
+    function doLogin() {
+      const seat = document.getElementById('inp-seat').value.trim();
+      const pwd = document.getElementById('inp-pwd').value.trim();
+      const rememberMe = document.getElementById('chk-remember').checked;
+
+      if(!seat || !pwd) {
+        showMsg("請輸入完整資訊");
+        return;
+      }
+
+      const btn = document.getElementById('btn-login'); 
+      btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i>'; 
+      btn.disabled = true;
+      
+      google.script.run.withSuccessHandler(res => {
+        btn.innerHTML = '登 入'; btn.disabled = false;
+        if(res.success) {
+          // 儲存邏輯
+          if(rememberMe) {
+              localStorage.setItem('s_portal_seat', seat);
+              localStorage.setItem('s_portal_pwd', pwd);
+          } else {
+              // 若沒勾選，存入 sessionStorage (關掉瀏覽器就消失)
+              sessionStorage.setItem('s_portal_seat', seat);
+              sessionStorage.setItem('s_portal_pwd', pwd);
+              localStorage.removeItem('s_portal_seat');
+              localStorage.removeItem('s_portal_pwd');
+          }
+
+          currentUser = { seat: seat, pwd: pwd };
+          cachedPayload = res.payload || [];
+          initDashboard(res);
+        } else {
+          localStorage.removeItem('s_portal_seat'); 
+          localStorage.removeItem('s_portal_pwd');
+          showMsg(res.msg);
+        }
+      }).apiLogin(seat, pwd);
+    }
+
+    /**
+     * 自動登入邏輯
+     */
+    function autoLogin() {
+       const savedSeat = localStorage.getItem('s_portal_seat') || sessionStorage.getItem('s_portal_seat');
+       const savedPwd = localStorage.getItem('s_portal_pwd') || sessionStorage.getItem('s_portal_pwd');
+       
+       if(savedSeat && savedPwd) {
+           document.getElementById('inp-seat').value = savedSeat;
+           document.getElementById('inp-pwd').value = savedPwd;
+           if(localStorage.getItem('s_portal_seat')) {
+               document.getElementById('chk-remember').checked = true;
+           }
+           doLogin();
+       } else {
+           document.getElementById('login-card').classList.remove('hidden');
+       }
+    }
+
+    function logout() { 
+        localStorage.removeItem('s_portal_seat'); 
+        localStorage.removeItem('s_portal_pwd'); 
+        sessionStorage.clear();
+        location.reload(); 
+    }
+
+    function showMsg(txt) {
+        document.getElementById('login-card').classList.remove('hidden');
+        document.getElementById('msg-area').innerText = txt;
+    }
+</script>

@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <base target="_top">
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>GradeFlow 成績查詢系統</title>
+  
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  
+  <?!= include('Style'); ?>
+</head>
+<body class="bg-slate-50 text-slate-800 min-h-screen flex flex-col font-sans">
+
+  <?!= include('View_Nav'); ?>
+
+  <main class="flex-1 flex flex-col items-center p-4 w-full max-w-[96%] mx-auto relative">
+    
+    <?!= include('View_Login'); ?>
+
+    <?!= include('View_Dashboard'); ?>
+    
+  </main>
+
+  <footer class="text-center py-6 text-slate-300 text-xs mt-auto">GradeFlow System &copy; 2026</footer>
+
+  <?!= include('View_Modals'); ?>
+
+  <?!= include('JS_Core'); ?>
+  <?!= include('JS_Auth'); ?>
+  <?!= include('JS_Dashboard'); ?>
+
+</body>
+</html>

@@ -1,0 +1,610 @@
+<script>
+    // 全域變數
+    let currentConfig = { index: -1, role: '' };
+    let currentBrowserFolder = { id: "", name: "" };
+
+    // ==========================================
+    // 1. 模板設定 (Templates)
+    // ==========================================
+    function loadTemplates() {
+      google.script.run.withSuccessHandler(tpl => {
+        appData.templates = tpl;
+        document.getElementById('tpl-missing-sub').value = tpl.missingSubject;
+        document.getElementById('tpl-missing-body').value = tpl.missingBody;
+        document.getElementById('tpl-report-sub').value = tpl.reportSubject;
+        document.getElementById('tpl-report-body').value = tpl.reportBody;
+      }).loadUserTemplates();
+    }
+    
+    function saveTemplates() {
+       const tpl = {
+         missingSubject: document.getElementById('tpl-missing-sub').value,
+         missingBody: document.getElementById('tpl-missing-body').value,
+         reportSubject: document.getElementById('tpl-report-sub').value,
+         reportBody: document.getElementById('tpl-report-body').value
+       };
+       google.script.run.withSuccessHandler(() => showToast("已儲存", "模板更新成功", "success",1000)).saveUserTemplates(JSON.stringify(tpl));
+       appData.templates = tpl;
+    }
+
+    // ==========================================
+    // 2. 連結管理 - 渲染邏輯
+    // ==========================================
+    function renderSettingsList() { 
+        renderSettingsView(); 
+        loadStorageConfig(); // 每次進入設定頁面時順便讀取資料夾設定
+    }
+
+    function renderSettingsView() {
+       const pList = document.getElementById('pending-list');
+       if (appData.pendingFiles.length > 0) {
+          document.getElementById('area-pending').classList.remove('hidden');
+          pList.innerHTML = appData.pendingFiles.map((f, i) => renderCard(f, i, 'pending')).join('');
+       } else {
+          document.getElementById('area-pending').classList.add('hidden');
+       }
+
+       const sList = document.getElementById('subject-list');
+       if (appData.subjectClasses.length > 0) {
+          document.getElementById('subject-empty').classList.add('hidden');
+          sList.innerHTML = appData.subjectClasses.map((c, i) => renderCard(c, i, 'subject')).join('');
+       } else {
+          sList.innerHTML = ''; document.getElementById('subject-empty').classList.remove('hidden');
+       }
+
+       const hList = document.getElementById('homeroom-list');
+       if (appData.homeroomClasses.length > 0) {
+          document.getElementById('homeroom-empty').classList.add('hidden');
+          hList.innerHTML = appData.homeroomClasses.map((c, i) => renderCard(c, i, 'homeroom')).join('');
+       } else {
+          hList.innerHTML = ''; document.getElementById('homeroom-empty').classList.remove('hidden');
+       }
+    }
+
+    // ★★★ [UI優化] 卡片渲染 (原本在 View_Settings 的部分) ★★★
+    function renderCard(item, index, role) {
+       const isPending = role === 'pending';
+       
+       // 樣式設定
+       const theme = isPending ? 'amber' : (role === 'subject' ? 'blue' : 'purple');
+       const icon = isPending ? 'fa-hourglass-start' : (role === 'subject' ? 'fa-book' : 'fa-graduation-cap');
+       
+       // Badge
+       let badge = isPending 
+           ? `<div class="absolute top-3 right-3 bg-amber-100 text-amber-700 text-[10px] px-2 py-1 rounded-full font-bold shadow-sm flex items-center"><i class="fa-solid fa-circle text-[6px] mr-1 animate-pulse"></i>NEW</div>` 
+           : ``;
+
+       // Actions 按鈕
+       let actions = isPending
+           ? `<button onclick="openConfigModal(${index}, '${role}')" class="w-full bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white font-bold py-2 rounded-lg shadow-md shadow-orange-100 transition-all mt-3 text-sm flex items-center justify-center">
+                <i class="fa-solid fa-wrench mr-2"></i> 進行設定
+              </button>
+              <button onclick="removePending(${index})" class="absolute -top-2 -right-2 bg-white text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-full w-8 h-8 shadow-md border border-slate-100 flex items-center justify-center transition-all opacity-0 group-hover:opacity-100 z-10"><i class="fa-solid fa-xmark"></i></button>`
+           : `<div class="flex gap-1 mt-3 pt-3 border-t border-slate-50">
+                <a href="${item.url}" target="_blank" class="flex-1 py-1.5 rounded-lg text-slate-400 hover:text-blue-600 hover:bg-blue-50 text-center transition-colors text-xs font-bold" title="開啟檔案"><i class="fa-solid fa-external-link-alt mr-1"></i>開啟</a>
+                <div class="w-px bg-slate-100 my-1"></div>
+                <button onclick="openConfigModal(${index}, '${role}')" class="flex-1 py-1.5 rounded-lg text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 transition-colors text-xs font-bold" title="編輯設定"><i class="fa-solid fa-pen mr-1"></i>編輯</button>
+                <div class="w-px bg-slate-100 my-1"></div>
+                <button onclick="delConf('${item.name}', '${role}')" class="flex-1 py-1.5 rounded-lg text-slate-400 hover:text-red-500 hover:bg-red-50 transition-colors text-xs font-bold" title="刪除連結"><i class="fa-solid fa-trash mr-1"></i>刪除</button>
+              </div>`;
+
+       // 底部資訊
+       let metaInfo = !isPending 
+           ? `<div class="flex items-center gap-3 mt-1">
+                <div class="text-[10px] font-bold text-slate-400 bg-slate-100 px-2 py-0.5 rounded-md truncate max-w-[60%]"><i class="fa-solid fa-list-ol mr-1"></i>${item.targets ? item.targets.length : 0} 分頁</div>
+                <div class="text-[10px] font-bold text-slate-400 bg-slate-100 px-2 py-0.5 rounded-md"><i class="fa-regular fa-clock mr-1"></i>${item.days}天</div>
+              </div>` 
+           : `<div class="text-xs text-amber-600/60 font-bold mt-1">請點擊設定以啟用</div>`;
+
+       return `
+         <div class="bg-white rounded-2xl p-5 shadow-[0_2px_8px_rgba(0,0,0,0.04)] hover:shadow-[0_8px_24px_rgba(0,0,0,0.08)] border border-slate-100 hover:border-${theme}-200 relative group transition-all duration-300">
+            ${badge}
+            <div class="flex items-start gap-3 mb-1">
+                <div class="w-10 h-10 rounded-xl bg-${theme}-50 text-${theme}-500 flex items-center justify-center text-lg flex-shrink-0">
+                    <i class="fa-solid ${icon}"></i>
+                </div>
+                <div class="overflow-hidden">
+                    <div class="font-bold text-base text-slate-700 truncate leading-tight" title="${item.name || item.title}">${item.name || item.title}</div>
+                    <div class="text-[10px] text-slate-400 truncate font-mono mt-0.5 opacity-60">${item.url}</div>
+                </div>
+            </div>
+            ${metaInfo}
+            ${actions}
+         </div>`;
+    }
+
+    // ==========================================
+    // 3. 連結管理 - 設定 Modal 邏輯
+    // ==========================================
+
+    // [修正] 手動新增連結 (直接開啟 Modal)
+    function openManualLinkModal() { 
+        currentConfig = { index: -1, role: 'create' };
+
+        document.getElementById('config-modal').classList.remove('hidden');
+        document.getElementById('modal-title').innerText = "新增連結";
+
+        // 清空欄位
+        document.getElementById('cfg-url').value = "";
+        document.getElementById('cfg-name').value = "";
+        document.getElementById('cfg-days').value = 7;
+        document.getElementById('cfg-cc').value = "";
+        document.getElementById('cfg-original-role').value = "create";
+
+        // 預設勾選：根據當前模式
+        document.getElementById('chk-role-subject').checked = (appData.mode === 'subject');
+        document.getElementById('chk-role-homeroom').checked = (appData.mode === 'homeroom');
+
+        // 重置分頁選單提示
+        document.getElementById('cfg-sheets-area').innerHTML = 
+            '<div class="h-full flex flex-col items-center justify-center text-slate-400 space-y-2">' +
+            '<i class="fa-solid fa-arrow-up text-xl animate-bounce"></i>' +
+            '<p class="text-xs">請先貼上網址，再點擊「讀取分頁」</p></div>';
+    }
+
+    // [修正] 開啟設定視窗 (支援雙身分偵測)
+    function openConfigModal(index, role) {
+       currentConfig = { index, role };
+       let item;
+       
+       if (role === 'pending') item = appData.pendingFiles[index];
+       else if (role === 'subject') item = appData.subjectClasses[index];
+       else item = appData.homeroomClasses[index];
+
+       document.getElementById('config-modal').classList.remove('hidden');
+       document.getElementById('modal-title').innerText = "設定連結";
+       const url = item.url;
+       
+       document.getElementById('cfg-url').value = url;
+       document.getElementById('cfg-original-role').value = role;
+       
+       // 顯示名稱處理
+       let displayName = item.name || item.title;
+       if(role === 'pending') { const match = displayName.match(/(\d+)$/); if(match) displayName = match[1]; }
+       document.getElementById('cfg-name').value = displayName;
+       document.getElementById('cfg-days').value = item.days || 7;
+       document.getElementById('cfg-cc').value = item.cc || '';
+
+       // ★★★ 檢查此 URL 是否同時存在於兩個清單中 ★★★
+       const existsInSubject = appData.subjectClasses.some(c => c.url === url);
+       const existsInHomeroom = appData.homeroomClasses.some(c => c.url === url);
+       
+       if (role === 'pending') {
+           document.getElementById('chk-role-subject').checked = (appData.mode === 'subject');
+           document.getElementById('chk-role-homeroom').checked = (appData.mode === 'homeroom');
+       } else {
+           document.getElementById('chk-role-subject').checked = existsInSubject;
+           document.getElementById('chk-role-homeroom').checked = existsInHomeroom;
+       }
+
+       refreshSheetListInModal(item.targets || []);
+    }
+
+    // [修正] 讀取分頁 (美化 Loading)
+    function refreshSheetListInModal(preSelected = []) {
+       const area = document.getElementById('cfg-sheets-area');
+       const btn = document.getElementById('btn-refresh-sheets');
+       const icon = btn.querySelector('i');
+       const url = document.getElementById('cfg-url').value.trim();
+
+       if(!url) {
+           area.innerHTML = '<div class="h-full flex items-center justify-center text-red-400 text-xs"><i class="fa-solid fa-circle-exclamation mr-1"></i>請先輸入 Google Sheet 網址</div>';
+           return;
+       }
+
+       area.innerHTML = '<div class="h-full flex items-center justify-center text-slate-400 text-xs"><i class="fa-solid fa-circle-notch fa-spin mr-2"></i>讀取中...</div>';
+       
+       btn.disabled = true;
+       if(icon) icon.classList.add('fa-spin');
+
+       google.script.run.withSuccessHandler(sheets => {
+          btn.disabled = false;
+          if(icon) icon.classList.remove('fa-spin');
+
+          if(sheets.length === 1 && sheets[0].startsWith("無法")) {
+             area.innerHTML = `<div class="p-4 text-center text-red-500 text-xs">${sheets[0]}</div>`;
+          } else {
+             area.innerHTML = sheets.map(s => {
+                const checked = preSelected.includes(s) ? 'checked' : '';
+                return `<label class="flex items-center hover:bg-indigo-50 p-2 rounded cursor-pointer transition-colors border-b border-slate-50 last:border-0">
+                    <input type="checkbox" value="${s}" name="modal-chk" class="w-4 h-4 text-indigo-600 rounded focus:ring-indigo-500 border-gray-300 mr-2" ${checked}> 
+                    <span class="text-slate-700 font-medium">${s}</span>
+                </label>`;
+             }).join('');
+          }
+       }).getSheetList(url);
+    }
+
+    // [修正] 儲存設定 (支援雙身分寫入)
+    function confirmSaveConfig() {
+       const name = document.getElementById('cfg-name').value.trim();
+       const url = document.getElementById('cfg-url').value.trim();
+       const days = document.getElementById('cfg-days').value;
+       const cc = document.getElementById('cfg-cc').value;
+       const targets = Array.from(document.querySelectorAll('input[name="modal-chk"]:checked')).map(c => c.value);
+       
+       const isSubject = document.getElementById('chk-role-subject').checked;
+       const isHomeroom = document.getElementById('chk-role-homeroom').checked;
+       
+       const oldRole = document.getElementById('cfg-original-role').value;
+       const index = currentConfig.index;
+
+       if(!name) return showToast("錯誤", "請輸入名稱", "error",5000);
+       if(!url) return showToast("錯誤", "請輸入網址", "error",5000);
+       if(targets.length === 0) return showToast("提示", "請至少選擇一個監控分頁", "warning",3000);
+       if(!isSubject && !isHomeroom) return showToast("錯誤", "請至少選擇一種身分", "error",5000);
+
+       const newConfig = { name, url, days, cc, targets };
+
+       // 1. 如果是 Pending 來的，先從 Pending 移除 (index > -1 避免 create 模式誤刪)
+       if(oldRole === 'pending' && index > -1) {
+           appData.pendingFiles.splice(index, 1);
+       }
+
+       // 2. 更新 Subject List (移除舊的 -> 新增)
+       appData.subjectClasses = appData.subjectClasses.filter(c => c.url !== url); 
+       if (isSubject) {
+           appData.subjectClasses.push(newConfig);
+           appData.subjectClasses.sort((a,b) => a.name.localeCompare(b.name));
+       }
+
+       // 3. 更新 Homeroom List
+       appData.homeroomClasses = appData.homeroomClasses.filter(c => c.url !== url);
+       if (isHomeroom) {
+           appData.homeroomClasses.push(newConfig);
+           appData.homeroomClasses.sort((a,b) => a.name.localeCompare(b.name));
+       }
+
+       document.getElementById('config-modal').classList.add('hidden');
+       
+       const btn = document.getElementById('btn-save-cfg');
+       const orgText = btn.innerHTML;
+       btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i>'; btn.disabled = true;
+
+       google.script.run.withSuccessHandler(res => {
+           btn.innerHTML = orgText; btn.disabled = false;
+           renderSettingsView();
+           if(typeof renderDashboardPicker === 'function') renderDashboardPicker(); 
+           showToast("成功", "連結設定已儲存", "success",1000);
+       }).apiSaveAllData(appData.subjectClasses, appData.homeroomClasses);
+    }
+
+    function delConf(name, role) {
+       if(!confirm("確定刪除此設定？")) return;
+       if(role === 'subject') appData.subjectClasses = appData.subjectClasses.filter(c => c.name !== name);
+       else appData.homeroomClasses = appData.homeroomClasses.filter(c => c.name !== name);
+       google.script.run.withSuccessHandler(() => {
+           renderSettingsView();
+           if(typeof renderDashboardPicker === 'function') renderDashboardPicker();
+       }).apiSaveAllData(appData.subjectClasses, appData.homeroomClasses);
+    }
+
+    function removePending(i) { 
+        if(confirm("移除此待處理項目？")) { 
+            appData.pendingFiles.splice(i, 1); 
+            renderSettingsView(); 
+        } 
+    }
+
+    // ==========================================
+    // 4. 批次設定邏輯
+    // ==========================================
+    function openBatchConfigModal() {
+       const allItems = [
+          ...appData.pendingFiles.map(f => ({...f, origin: 'pending', role: appData.mode, days: 7, cc: '', targets: []})),
+          ...appData.subjectClasses.map(c => ({...c, origin: 'subject', role: 'subject'})),
+          ...appData.homeroomClasses.map(c => ({...c, origin: 'homeroom', role: 'homeroom'}))
+       ];
+       if (allItems.length === 0) return showToast("提示", "無資料", "warning",5000);
+       document.getElementById('batch-config-modal').classList.remove('hidden');
+       const tbody = document.getElementById('batch-config-tbody'); tbody.innerHTML = "";
+       allItems.forEach((c, idx) => {
+          const tr = document.createElement('tr');
+          tr.className = c.origin === 'pending' ? "bg-amber-50" : "hover:bg-slate-50";
+          let displayName = c.name || c.title;
+          if(c.origin === 'pending') { const match = c.title.match(/(\d+)$/); if(match) displayName = match[1]; }
+          const isSub = (c.origin === 'subject') || (c.origin === 'pending' && c.role === 'subject');
+          const isHome = (c.origin === 'homeroom') || (c.origin === 'pending' && c.role === 'homeroom');
+          tr.innerHTML = `
+             <td class="p-3 text-slate-400 text-center text-xs">${idx + 1}</td>
+             <td class="p-3 text-xs text-slate-500">${c.origin === 'pending' ? '待處理' : (c.origin==='subject'?'任課':'導師')}</td>
+             <td class="p-3"><div class="flex gap-2 items-center">
+                <label><input type="checkbox" class="batch-role-s w-4 h-4 text-blue-600 rounded" ${isSub?'checked':''}> <span class="text-blue-700 font-bold text-xs">任課</span></label>
+                <label><input type="checkbox" class="batch-role-h w-4 h-4 text-purple-600 rounded" ${isHome?'checked':''}> <span class="text-purple-700 font-bold text-xs">導師</span></label>
+             </div></td>
+             <td class="p-3"><input class="cfg-name border border-slate-300 rounded px-2 py-1 w-full font-bold text-slate-700" value="${displayName}"><input type="hidden" class="cfg-url" value="${c.url}"></td>
+             <td class="p-3"><input type="number" class="cfg-days w-16 border rounded p-1 text-center" value="${c.days}"></td>
+             <td class="p-3"><input type="text" class="cfg-cc w-full border rounded p-1 text-xs" value="${c.cc || ''}"></td>
+             <td class="p-3"><div class="tag-container" onclick="focusTagInput(this)"><input type="text" class="tag-input" placeholder="輸入..." onkeydown="handleTagKey(event)"></div></td>`;
+          tbody.appendChild(tr);
+          const container = tr.querySelector('.tag-container');
+          if(c.targets) c.targets.forEach(t => addTag(container, t));
+       });
+    }
+
+    function saveBatchConfigs() {
+       const rows = document.querySelectorAll('#batch-config-tbody tr');
+       let newSubjectList = [], newHomeroomList = [];
+       rows.forEach(tr => {
+          const name = tr.querySelector('.cfg-name').value.trim(); if(!name) return;
+          const isSub = tr.querySelector('.batch-role-s').checked;
+          const isHome = tr.querySelector('.batch-role-h').checked;
+          const url = tr.querySelector('.cfg-url').value;
+          const days = tr.querySelector('.cfg-days').value;
+          const cc = tr.querySelector('.cfg-cc').value;
+          const targets = Array.from(tr.querySelectorAll('.tag-chip')).map(chip => chip.dataset.val);
+          const item = { name, url, days, cc, targets };
+          if(isSub) newSubjectList.push(item);
+          if(isHome) newHomeroomList.push(item);
+       });
+       const btn = document.getElementById('btn-save-batch-cfg'); btn.innerText = "儲存中..."; btn.disabled = true;
+       google.script.run.withSuccessHandler(res => {
+          btn.innerHTML = '<i class="fa-solid fa-floppy-disk mr-2"></i> 儲存所有變更'; btn.disabled = false;
+          document.getElementById('batch-config-modal').classList.add('hidden');
+          appData.subjectClasses = newSubjectList; appData.homeroomClasses = newHomeroomList; appData.pendingFiles = [];
+          renderSettingsView(); 
+          if(typeof renderDashboardPicker === 'function') renderDashboardPicker();
+          showToast("成功", "已更新資料庫", "success",1000);
+       }).apiSaveAllData(newSubjectList, newHomeroomList);
+    }
+
+    // ==========================================
+    // 5. 資料庫同步邏輯
+    // ==========================================
+    function syncToDatabase() {
+        const url = document.getElementById('db-url').value.trim();
+        const btn = document.getElementById('btn-db-sync'); // 取得按鈕
+        const orgHtml = btn.innerHTML; // 備份原始按鈕文字
+
+        if(!url) return showToast("錯誤", "請輸入資料庫網址", "error",5000);
+        
+        // ★★★ 防呆機制：鎖定按鈕並顯示讀取中 ★★★
+        btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin mr-2"></i> 讀取設定...';
+        btn.disabled = true;
+
+        document.getElementById('sync-selector-modal').classList.remove('hidden');
+        const body = document.getElementById('sync-selector-body');
+        body.innerHTML = '<div class="text-center py-12"><div class="loader mx-auto mb-4"></div><p class="text-slate-500">正在讀取各科分頁資料...</p></div>';
+        
+        google.script.run
+            .withSuccessHandler(data => {
+                // 成功後還原按鈕狀態
+                btn.innerHTML = orgHtml;
+                btn.disabled = false;
+                renderSyncSelector(data);
+            })
+            .withFailureHandler(err => {
+                // 失敗也要還原，並顯示錯誤
+                btn.innerHTML = orgHtml;
+                btn.disabled = false;
+                document.getElementById('sync-selector-modal').classList.add('hidden');
+                showToast("錯誤", "讀取失敗：" + err.message, "error",5000);
+            })
+            .apiGetHomeroomSyncData();
+    }
+
+    function renderSyncSelector(data) {
+        const container = document.getElementById('sync-selector-body');
+        container.innerHTML = '';
+        
+        // ★★★ 關鍵修正：先關閉設定視窗 (A)，再開同步視窗 (B) ★★★
+        const modalA = document.getElementById('db-config-modal');
+        const modalB = document.getElementById('sync-selector-modal');
+        
+        modalA.classList.add('hidden'); // 關閉 A
+        modalA.classList.remove('flex'); // 確保移除 flex 屬性 (如果是用 flex 顯示)
+        
+        // 延遲一點點再開 B，視覺上比較順暢
+        setTimeout(() => {
+            modalB.classList.remove('hidden'); // 開啟 B
+        }, 100);
+        // ★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★
+
+        if (data.length === 0) {
+            container.innerHTML = '<div class="text-center text-gray-500 py-4">沒有找到可同步的班級資料表</div>';
+            return;
+        }
+
+        data.forEach(item => {
+            // ... (原本產生 Checkbox 的程式碼保持不變) ...
+            const div = document.createElement('div');
+            div.className = "border rounded p-3 bg-gray-50";
+            
+            let checkboxes = '';
+            if (item.allSheets.length > 0) {
+                item.allSheets.forEach(sheet => {
+                    const isChecked = (item.selected && item.selected.includes(sheet)) ? 'checked' : '';
+                    checkboxes += `
+                        <label class="flex items-center space-x-2 text-sm cursor-pointer hover:bg-gray-100 p-1 rounded">
+                            <input type="checkbox" value="${sheet}" class="sync-chk w-4 h-4 text-blue-600 rounded" ${isChecked}>
+                            <span class="text-gray-700">${sheet}</span>
+                        </label>
+                    `;
+                });
+            } else {
+                checkboxes = '<span class="text-xs text-red-400">無法讀取分頁</span>';
+            }
+
+            div.innerHTML = `
+                <h4 class="font-bold text-gray-700 mb-2 flex items-center justify-between" data-subject="${item.name}">
+                    <span><i class="fa-solid fa-book mr-2 text-blue-500"></i>${item.name}</span>
+                    <span class="text-xs font-normal text-gray-400 truncate ml-2 max-w-[150px]">${item.url}</span>
+                </h4>
+                <div class="grid grid-cols-2 gap-2 max-h-32 overflow-y-auto custom-scrollbar">
+                    ${checkboxes}
+                </div>
+            `;
+            container.appendChild(div);
+        });
+    }
+
+    function toggleSyncGroup(btn) {
+        const group = btn.closest('.bg-slate-50').nextElementSibling;
+        const chks = group.querySelectorAll('input[type="checkbox"]');
+        const allChecked = Array.from(chks).every(c => c.checked);
+        chks.forEach(c => c.checked = !allChecked);
+    }
+
+    // [修正] 確認同步 (並關閉視窗)
+    function confirmSyncExecution() {
+        const dbUrl = document.getElementById('db-url').value.trim();
+        const cards = document.querySelectorAll('#sync-selector-body > div');
+        let selectionMap = {};
+        
+        cards.forEach(card => {
+            const subject = card.querySelector('h4').dataset.subject;
+            const checked = Array.from(card.querySelectorAll('.sync-chk:checked')).map(c => c.value);
+            selectionMap[subject] = checked;
+        });
+
+        const btn = document.getElementById('btn-confirm-sync');
+        const originalHtml = btn.innerHTML;
+        
+        // ★★★ UX 優化：不要關閉視窗，而是鎖定按鈕並顯示讀取中 ★★★
+        btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin mr-2"></i>正在同步資料庫...';
+        btn.disabled = true;
+        btn.classList.add('opacity-75', 'cursor-not-allowed');
+        
+        // 顯示全域 Toast 讓使用者知道開始了 (雙重回饋)
+        showToast("處理中", "正在背景執行同步，請稍候...", "info", 8000);
+
+        google.script.run.withSuccessHandler(() => {
+            // 第一步儲存設定成功，接著執行同步
+            google.script.run.withSuccessHandler(res => {
+                
+                // ★★★ 同步完成後，才還原按鈕並關閉視窗 ★★★
+                btn.innerHTML = originalHtml;
+                btn.disabled = false;
+                btn.classList.remove('opacity-75', 'cursor-not-allowed');
+                document.getElementById('sync-selector-modal').classList.add('hidden'); // 關閉 B 視窗
+                
+                if(res.success) {
+                    showToast("同步成功", `已更新 ${res.count} 筆學生資料`, "success");
+                    // 更新介面上的時間 (如果有)
+                    const masterStatus = document.getElementById('master-status');
+                    if(masterStatus) {
+                        masterStatus.innerHTML = `最後更新：<span class="text-green-600 font-bold">${new Date().toLocaleTimeString()} (剛同步)</span>`;
+                        masterStatus.classList.add('animate-pulse');
+                    }
+                } else {
+                    // 失敗時，重新顯示視窗讓使用者重試，或只顯示錯誤
+                    showToast("同步失敗", res.msg, "error");
+                    // 失敗通常建議視窗留著，讓使用者知道發生什麼事，這裡選擇不關閉或重開
+                    document.getElementById('sync-selector-modal').classList.remove('hidden'); 
+                }
+            }).apiSyncToDatabase(dbUrl);
+            
+        }).apiSaveHomeroomSyncSettings(selectionMap);
+    }
+    
+    // ==========================================
+    // 6. 雲端硬碟瀏覽與設定
+    // ==========================================
+    function loadStorageConfig() {
+        google.script.run.withSuccessHandler(res => {
+            const input = document.getElementById('cfg-folder-id');
+            const status = document.getElementById('folder-status');
+            
+            if(res.success) {
+                input.value = res.id || "";
+                status.innerHTML = res.id ? `<i class="fa-regular fa-folder-open mr-2 text-amber-500"></i>${res.name}` : `<span class="text-slate-400">未設定 (根目錄)</span>`;
+            }
+        }).apiGetStorageFolder();
+    }
+
+    function saveStorageFolder() {
+        const val = document.getElementById('cfg-folder-id').value.trim();
+        const btn = document.getElementById('btn-save-folder');
+        const orgHtml = btn.innerHTML;
+        btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i>'; btn.disabled = true;
+
+        google.script.run.withSuccessHandler(res => {
+            btn.innerHTML = orgHtml; btn.disabled = false;
+            if(res.success) {
+                showToast("設定成功", `預設儲存位置：${res.folderName || '根目錄'}`, "success",1000);
+                loadStorageConfig(); 
+            } else {
+                showToast("設定失敗", res.msg, "error",5000);
+            }
+        }).apiSaveStorageFolder(val);
+    }
+
+    function openDriveBrowser() {
+        document.getElementById('drive-browser-modal').classList.remove('hidden');
+        const currentInput = document.getElementById('cfg-folder-id').value.trim();
+        let startId = null;
+        if(currentInput) {
+             const match = currentInput.match(/folders\/([-\w]+)/);
+             startId = match ? match[1] : currentInput;
+        }
+        loadDriveFolder(startId);
+    }
+
+    function loadDriveFolder(folderId) {
+        const list = document.getElementById('browser-list');
+        list.innerHTML = '<div class="text-center py-12 text-slate-400"><i class="fa-solid fa-circle-notch fa-spin mr-2"></i>讀取中...</div>';
+        document.getElementById('btn-browser-select').disabled = true;
+
+        google.script.run.withSuccessHandler(res => {
+            if(!res.success) {
+                list.innerHTML = `<div class="text-center py-10 text-red-400"><i class="fa-solid fa-triangle-exclamation mr-2"></i>${res.msg}</div>`;
+                if(folderId) setTimeout(() => loadDriveFolder(null), 1500);
+                return;
+            }
+
+            currentBrowserFolder = res.current;
+            document.getElementById('browser-current-name').innerText = res.current.name;
+            document.getElementById('browser-count').innerText = res.children.length;
+            document.getElementById('btn-browser-select').disabled = false;
+
+            let html = "";
+            if(res.parent) {
+                html += `
+                <button onclick="loadDriveFolder('${res.parent}')" class="w-full text-left px-3 py-3 rounded hover:bg-slate-100 flex items-center text-slate-500 font-bold border-b border-dashed border-slate-200 mb-1">
+                    <i class="fa-solid fa-level-up-alt mr-3 w-6 text-center"></i> .. (回上一層)
+                </button>`;
+            }
+            if(res.children.length === 0) {
+                html += `<div class="text-center py-12 text-slate-300 italic">此資料夾沒有子資料夾</div>`;
+            } else {
+                html += res.children.map(f => `
+                    <button onclick="loadDriveFolder('${f.id}')" class="w-full text-left px-3 py-3 rounded hover:bg-blue-50 flex items-center text-slate-700 transition-colors group border-b border-transparent hover:border-blue-100">
+                        <i class="fa-solid fa-folder text-amber-400 mr-3 w-6 text-center text-lg group-hover:scale-110 transition-transform"></i>
+                        <span class="truncate flex-1">${f.name}</span>
+                        <i class="fa-solid fa-chevron-right text-xs text-slate-300 opacity-0 group-hover:opacity-100"></i>
+                    </button>
+                `).join('');
+            }
+            list.innerHTML = html;
+        }).apiBrowseDrive(folderId);
+    }
+
+    function confirmFolderSelection() {
+        const input = document.getElementById('cfg-folder-id');
+        input.value = currentBrowserFolder.id;
+        input.classList.add('bg-amber-50', 'text-amber-700', 'font-bold');
+        setTimeout(() => input.classList.remove('bg-amber-50', 'text-amber-700', 'font-bold'), 500);
+        document.getElementById('drive-browser-modal').classList.add('hidden');
+    }
+
+    /**
+     * 新學年重置：清空 DB_Auth
+     */
+    function doResetAuth() {
+        // 第一道防線：確認對話框
+        if(!confirm("⚠️ 危險操作：確定要清空所有帳號密碼嗎？\n\n此操作通常只在「新學年開始」且「班級成員變動」時執行。\n執行後，所有舊生將無法登入，直到您重新執行同步。")) return;
+        
+        // 第二道防線：手動輸入確認
+        const check = prompt("此操作無法復原！\n請輸入 'RESET' (大寫) 以確認清空權限表：");
+        if(check !== 'RESET') return alert("已取消操作。");
+
+        // 呼叫後端
+        google.script.run.withSuccessHandler(res => {
+            if(res.success) {
+                alert("✅ 權限表已清空。\n\n請記得執行「同步最新成績」以建立新學年的學生名單與密碼。");
+            } else {
+                alert("❌ 操作失敗：" + res.msg);
+            }
+        }).apiResetAuthDatabase();
+    }
+</script>

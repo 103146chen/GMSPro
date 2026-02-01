@@ -1,0 +1,40 @@
+<div id="analysis-modal" class="fixed inset-0 bg-slate-900/50 hidden flex items-center justify-center p-4 backdrop-blur-sm z-50">
+    <div class="bg-white rounded-xl shadow-2xl w-full max-w-md overflow-hidden animate-fade-in flex flex-col max-h-[90vh]">
+      <div class="bg-gradient-to-r from-indigo-600 to-purple-600 text-white px-5 py-3 flex justify-between items-center flex-shrink-0">
+        <h3 class="font-bold text-lg"><i class="fa-solid fa-chart-pie mr-2"></i>成績落點分析</h3>
+        <button onclick="document.getElementById('analysis-modal').classList.add('hidden')" class="hover:text-indigo-200"><i class="fa-solid fa-xmark text-xl"></i></button>
+      </div>
+      <div class="p-6 overflow-y-auto">
+          <div class="mb-4 pb-4 border-b border-slate-100">
+              <h4 class="font-bold text-slate-800 text-lg mb-1" id="an-task">--</h4>
+              <div class="text-xs text-slate-500" id="an-sub">--</div>
+          </div>
+          <div class="grid grid-cols-3 gap-3 mb-6 text-center">
+              <div class="bg-slate-50 p-2 rounded"><div class="text-xs text-slate-400">全班平均</div><div class="font-bold text-lg text-blue-600" id="an-avg">--</div></div>
+              <div class="bg-slate-50 p-2 rounded"><div class="text-xs text-slate-400">最高分</div><div class="font-bold text-lg text-green-600" id="an-max">--</div></div>
+              <div class="bg-slate-50 p-2 rounded"><div class="text-xs text-slate-400">最低分</div><div class="font-bold text-lg text-red-600" id="an-min">--</div></div>
+          </div>
+          
+          <div class="grid grid-cols-5 gap-1 mb-6 text-center">
+             <div class="val-bottom p-2 rounded border border-red-100"><div class="text-[10px] opacity-70">底</div><div class="font-bold text-sm" id="an-p12">--</div></div>
+             <div class="val-back p-2 rounded border border-orange-100"><div class="text-[10px] opacity-70">後</div><div class="font-bold text-sm" id="an-p25">--</div></div>
+             <div class="val-avg p-2 rounded border border-emerald-100"><div class="text-[10px] opacity-70">均</div><div class="font-bold text-sm" id="an-p50">--</div></div>
+             <div class="val-front p-2 rounded border border-blue-100"><div class="text-[10px] opacity-70">前</div><div class="font-bold text-sm" id="an-p75">--</div></div>
+             <div class="val-top p-2 rounded border border-purple-100"><div class="text-[10px] opacity-70">頂</div><div class="font-bold text-sm" id="an-p88">--</div></div>
+          </div>
+
+          <div class="h-48 w-full relative"><canvas id="an-chart"></canvas></div>
+      </div>
+    </div>
+</div>
+
+<div id="pwd-modal" class="fixed inset-0 bg-slate-900/50 hidden flex items-center justify-center p-4 backdrop-blur-sm z-50">
+    <div class="bg-white p-6 rounded-xl w-full max-w-sm shadow-2xl animate-fade-in">
+        <h3 class="font-bold text-lg mb-4 text-slate-700">修改密碼</h3>
+        <input id="new-pwd" type="text" class="w-full border p-2.5 rounded-lg mb-4 outline-none focus:ring-2 focus:ring-blue-500 bg-slate-50" placeholder="請輸入新密碼">
+        <div class="flex gap-2 justify-end">
+            <button onclick="document.getElementById('pwd-modal').classList.add('hidden')" class="px-4 py-2 text-slate-500 hover:bg-slate-50 rounded-lg transition-colors font-bold text-sm">取消</button>
+            <button onclick="doChangePwd()" id="btn-chg-pwd" class="px-4 py-2 bg-blue-600 text-white rounded-lg font-bold hover:bg-blue-700 transition-colors text-sm">確認修改</button>
+        </div>
+    </div>
+</div>

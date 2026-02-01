@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <base target="_top">
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>系統初始化 | GradeFlow</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <style>
+      @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;700&display=swap');
+      body { font-family: 'Noto Sans TC', sans-serif; }
+      .animate-fade-in { animation: fadeIn 0.5s ease-out forwards; }
+      @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+  </style>
+</head>
+<body class="bg-slate-100 min-h-screen flex items-center justify-center p-4">
+
+    <div class="w-full max-w-md bg-white p-8 rounded-2xl shadow-xl border border-slate-200 animate-fade-in">
+       <div class="text-center mb-6">
+           <div class="w-16 h-16 bg-slate-800 text-white rounded-2xl flex items-center justify-center text-3xl mx-auto mb-4 shadow-lg transform -rotate-3">
+             <i class="fa-solid fa-screwdriver-wrench"></i>
+           </div>
+           <h1 class="text-2xl font-bold text-slate-800">系統初始化</h1>
+           <p class="text-slate-500 mt-2 text-sm">首次使用，請連結資料庫並設定金鑰。</p>
+       </div>
+       
+       <div class="space-y-4">
+           <div>
+               <label class="block text-xs font-bold text-slate-500 mb-1 ml-1">資料庫網址 (Spreadsheet URL)</label>
+               <input id="inp-db-url" type="text" class="w-full border border-slate-300 rounded-lg p-3 text-sm focus:border-blue-500 outline-none transition-colors" placeholder="https://docs.google.com/spreadsheets/d/...">
+           </div>
+
+           <div>
+               <label class="block text-xs font-bold text-slate-500 mb-1 ml-1">加密金鑰 (Salt)</label>
+               <input id="inp-salt" type="password" class="w-full border border-slate-300 rounded-lg p-3 text-sm focus:border-blue-500 outline-none transition-colors" placeholder="需與教師端設定完全一致">
+               <p class="text-[10px] text-slate-400 mt-1 ml-1">* 若未設定，將無法解密使用自訂金鑰加密的資料。</p>
+           </div>
+           
+           <button onclick="saveSettings()" id="btn-save" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 rounded-lg shadow-lg active:scale-95 transition-all mt-2">連結並儲存設定</button>
+       </div>
+    </div>
+
+    <script>
+      function saveSettings() {
+        const url = document.getElementById('inp-db-url').value.trim();
+        const salt = document.getElementById('inp-salt').value.trim();
+
+        if(!url) return alert("請輸入資料庫網址");
+        
+        const btn = document.getElementById('btn-save'); 
+        const orgText = btn.innerText;
+        btn.innerText = "設定中..."; 
+        btn.disabled = true;
+        
+        google.script.run
+          .withSuccessHandler(res => {
+            if(res.success) {
+              alert("✅ 設定完成！系統將重新整理進入查詢頁面。");
+              window.location.reload(); 
+            } else { 
+              alert(res.msg); 
+              btn.innerText = orgText; 
+              btn.disabled = false; 
+            }
+          })
+          .apiSaveSettings(url, salt, true);
+      }
+    </script>
+</body>
+</html>

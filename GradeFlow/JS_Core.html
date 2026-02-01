@@ -1,0 +1,47 @@
+<script>
+    /**
+     * JS_Core: 全域變數與通用初始化
+     */
+    const sysMode = "<?= sysMode ?>"; 
+    let currentUser = { seat: '', pwd: '' };
+    let cachedPayload = [];
+    let currentViewData = [];
+    let currentChart = null; 
+
+    // 啟動點
+    window.onload = function() {
+       autoLogin(); // 呼叫 JS_Auth 中的自動登入
+    };
+
+    /**
+     * 初始化儀表板
+     */
+    function initDashboard(data) {
+        document.getElementById('login-card').classList.add('hidden');
+        document.getElementById('dashboard').classList.remove('hidden');
+        document.getElementById('dash-name').innerText = data.name;
+        document.getElementById('dash-seat').innerText = data.seat;
+        document.getElementById('dash-time').innerText = data.time || "剛剛";
+        
+        document.getElementById('user-info').classList.remove('hidden');
+        document.getElementById('display-name').innerText = data.name;
+
+        const subjects = [...new Set(cachedPayload.map(i => i.subject))];
+        const subSelect = document.getElementById('filter-subject');
+        subSelect.innerHTML = '<option value="all">全科目</option>';
+        subjects.forEach(s => subSelect.innerHTML += `<option value="${s}">${s}</option>`);
+
+        calcGlobalStats();
+        applyFilters();
+    }
+
+    /**
+     * 數值格式化
+     */
+    function formatNum(val) { 
+        if (typeof val === 'number') { 
+            return Number.isInteger(val) ? val : val.toFixed(2); 
+        } 
+        return val; 
+    }
+</script>

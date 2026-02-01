@@ -1,0 +1,493 @@
+<script>
+  // 渲染卡片選單 (v8.1 導師模式升級)
+  function renderDashboardPicker() {
+    const grid = document.getElementById('dash-class-grid');
+    const noData = document.getElementById('dash-no-data');
+    const title = document.getElementById('picker-title');
+    const desc = document.getElementById('picker-desc');
+
+    // 根據模式調整標題
+    if(appData.mode === 'homeroom') {
+        title.innerText = "導師班級管理";
+        desc.innerText = "查看全班總表或點擊單科進行管理";
+    } else {
+        title.innerText = "請選擇要管理的班級";
+        desc.innerText = "點擊卡片進入管理介面";
+    }
+
+    if(!appData.classes || appData.classes.length === 0) { 
+        grid.innerHTML = ""; 
+        noData.classList.remove('hidden'); 
+        return; 
+    }
+    
+    noData.classList.add('hidden');
+    let html = "";
+
+    // ★★★ v8.1: 導師模式插入「全班總表」卡片 ★★★
+    if(appData.mode === 'homeroom') {
+        html += `
+        <button onclick="openMasterSheet()" class="col-span-full md:col-span-2 bg-gradient-to-r from-pink-600 to-purple-600 p-6 rounded-xl shadow-lg hover:shadow-xl hover:-translate-y-1 transition-all text-left group relative overflow-hidden">
+            <div class="absolute top-0 right-0 p-4 opacity-20 text-white"><i class="fa-solid fa-table-cells text-8xl"></i></div>
+            <div class="flex items-center gap-4 relative z-10">
+                <div class="w-16 h-16 rounded-full bg-white/20 text-white flex items-center justify-center text-3xl font-bold backdrop-blur-sm">
+                    <i class="fa-solid fa-crown"></i>
+                </div>
+                <div>
+                    <h4 class="font-bold text-2xl text-white mb-1">全班成績總表</h4>
+                    <p class="text-pink-100 text-sm">彙整所有連結科目的成績資料</p>
+                </div>
+            </div>
+        </button>
+        `;
+    }
+
+    // 渲染一般班級/科目卡片
+    html += appData.classes.map((c, idx) => `
+      <button onclick="selectClassFromDashboard(${idx})" class="bg-white p-6 rounded-xl shadow-sm border border-slate-200 hover:border-blue-400 hover:shadow-md hover:-translate-y-1 transition-all text-left group">
+        <div class="flex justify-between items-start mb-3">
+           <div class="w-12 h-12 rounded-full ${appData.mode==='homeroom'?'bg-purple-100 text-purple-600 group-hover:bg-purple-600':'bg-blue-100 text-blue-600 group-hover:bg-blue-600'} flex items-center justify-center text-xl font-bold group-hover:text-white transition-colors">
+              ${c.name.substring(0,1)}
+           </div>
+           <i class="fa-solid fa-chevron-right text-slate-300 ${appData.mode==='homeroom'?'group-hover:text-purple-500':'group-hover:text-blue-500'}"></i>
+        </div>
+        <h4 class="font-bold text-lg text-slate-700 mb-1">${c.name}</h4>
+        <div class="text-xs text-slate-400 truncate">監控: ${c.targets ? c.targets.length : 0} 個分頁</div>
+      </button>`).join('');
+
+    grid.innerHTML = html;
+  }
+
+  // 進入單一班級/科目管理介面
+  function selectClassFromDashboard(index) {
+    appData.currentClass = appData.classes[index];
+    
+    document.getElementById('dash-picker').classList.add('hidden');
+    document.getElementById('dash-content').classList.remove('hidden');
+    
+    // 設定標題 (根據模式調整 Badge)
+    document.getElementById('dash-title-class').innerText = appData.currentClass.name;
+    const badge = document.getElementById('dash-badge-class');
+    if(appData.mode === 'homeroom') {
+        badge.innerText = "Subject";
+        badge.className = "bg-purple-100 text-purple-600 text-sm px-2 py-1 rounded mr-3 align-middle";
+    } else {
+        badge.innerText = "Class";
+        badge.className = "bg-blue-100 text-blue-600 text-sm px-2 py-1 rounded mr-3 align-middle";
+    }
+
+    // 填入資料
+    const targets = appData.currentClass.targets || [];
+    document.getElementById('dash-targets').innerText = targets.join(", ") || "無設定";
+    document.getElementById('dash-days').innerText = appData.currentClass.days;
+    
+    switchDashTab('missing');
+  }
+
+  // ★★★ v8.1: 開啟全班總表 ★★★
+  function openMasterSheet() {
+      document.getElementById('dash-picker').classList.add('hidden');
+      document.getElementById('dash-content-master').classList.remove('hidden');
+      
+      // 更新統計數字
+      document.getElementById('master-subject-count').innerText = appData.classes.length;
+  }
+
+  // 返回總覽 (v8.1 更新：同時隱藏 master 視圖)
+  function showDashboardPicker() {
+    document.getElementById('dash-content').classList.add('hidden');
+    document.getElementById('dash-content-master').classList.add('hidden'); // 新增這行
+    document.getElementById('dash-picker').classList.remove('hidden');
+    
+    appData.currentClass = null;
+    document.getElementById('dash-title-class').innerText = "";
+    document.getElementById('dash-targets').innerText = "--";
+    document.getElementById('dash-days').innerText = "--";
+    
+    // 重置成績單 Tab 狀態
+    document.getElementById('rpt-sheet-list').innerHTML = '<div class="text-xs text-slate-400 text-center mt-10">載入中...</div>';
+    document.getElementById('column-list').innerHTML = "";
+    document.getElementById('simple-preview').innerHTML = '<div class="text-slate-300 text-center mt-20">預覽內容將顯示於此</div>';
+    document.getElementById('col-mask').classList.remove('hidden');
+    
+    if(typeof reportRawData !== 'undefined') reportRawData = { full: [], headers: [], selectedCols: [] };
+  }
+
+  // Tab 切換邏輯 (維持不變)
+  function switchDashTab(tabName) {
+    const btnMissing = document.getElementById('tab-btn-missing');
+    const btnReport = document.getElementById('tab-btn-report');
+    const divMissing = document.getElementById('dash-tab-missing');
+    const divReport = document.getElementById('dash-tab-report');
+
+    if (tabName === 'missing') {
+       btnMissing.className = "flex-1 py-4 text-center font-bold text-amber-600 border-b-4 border-amber-500 bg-amber-50 transition-all";
+       btnReport.className = "flex-1 py-4 text-center font-bold text-slate-400 border-b-2 border-transparent hover:text-blue-500 transition-all";
+       divMissing.classList.remove('hidden');
+       divReport.classList.add('hidden');
+    } else {
+       btnMissing.className = "flex-1 py-4 text-center font-bold text-slate-400 border-b-2 border-transparent hover:text-amber-500 transition-all";
+       btnReport.className = "flex-1 py-4 text-center font-bold text-blue-600 border-b-4 border-blue-500 bg-blue-50 transition-all";
+       divMissing.classList.add('hidden');
+       divReport.classList.remove('hidden');
+       loadReportTab();
+    }
+  }
+
+  // 載入成績單分頁列表 (維持不變)
+  function loadReportTab() {
+     const listArea = document.getElementById('rpt-sheet-list');
+     // 如果已經有內容且不是 Loading 狀態，就不重複載入
+     if(listArea.children.length > 1 && !listArea.innerHTML.includes("loader")) return;
+     
+     listArea.innerHTML = '<div class="flex justify-center py-4"><div class="loader"></div></div>';
+     
+     google.script.run.withSuccessHandler(sheets => { 
+        if(!sheets || sheets.length === 0) { 
+            // ★★★ 優化空狀態：顯示引導按鈕 ★★★
+            listArea.innerHTML = `
+                <div class="flex flex-col items-center justify-center py-8 text-center">
+                    <div class="text-slate-300 text-4xl mb-2"><i class="fa-regular fa-folder-open"></i></div>
+                    <p class="text-xs text-slate-400 mb-4">目前沒有設定任何成績分頁</p>
+                    <button onclick="jumpToLinkSettings()" class="bg-blue-50 text-blue-600 px-4 py-2 rounded-lg text-xs font-bold hover:bg-blue-100 transition-colors">
+                        <i class="fa-solid fa-gear mr-1"></i> 前往連結設定
+                    </button>
+                </div>`; 
+            return; 
+        }
+        
+        listArea.innerHTML = sheets.map(s => `
+            <button onclick="handleSheetClick(this, '${s}')" class="sheet-btn w-full text-left px-4 py-3 rounded-lg text-sm font-bold text-slate-600 hover:bg-blue-50 hover:text-blue-600 transition-all border border-transparent focus:outline-none flex justify-between items-center group">
+                <span class="truncate">${s}</span><i class="fa-solid fa-chevron-right text-xs opacity-0 group-hover:opacity-100 text-blue-400"></i>
+            </button>`).join('');
+     }).getSheetList(appData.currentClass.url);
+    }
+
+    // 輔助函式：跳轉到連結設定頁面
+    function jumpToLinkSettings() {
+        // 1. 切換到連結管理 View
+        switchView('link');
+        
+        // 2. 自動過濾出當前班級的卡片 (透過觸發搜尋或直接定位)
+        // 這裡簡單做：重新渲染列表，讓使用者自己找
+        if(typeof renderSettingsView === 'function') renderSettingsView();
+        
+        // 3. 提示使用者
+        showToast("提示", "請找到對應班級並點擊「編輯設定」來新增分頁", "info",3000);
+    }
+
+  // 缺交掃描 (維持不變)
+  function scanMissing() {
+    const targets = appData.currentClass.targets;
+    if(!targets || targets.length === 0) return showToast("錯誤","請先在設定頁設定監控分頁","error",3000);
+    const btn = document.getElementById('btn-scan'); const originalHtml = btn.innerHTML; btn.innerHTML = '<div class="loader"></div>';
+    google.script.run.withSuccessHandler(res => {
+       btn.innerHTML = originalHtml;
+       if(!res.success) return showToast("錯誤", res.msg, "error",5000);
+       if(res.data.length === 0) return showToast("很棒", "所有分頁皆無缺交！", "success",1000);
+       batchData = { type: 'missing', sheetName: 'All Sheets', list: res.data, currentIndex: 0 }; 
+       openModal();
+    }).apiScanAllClassTargets(appData.currentClass.url, targets, appData.currentClass.days);
+  }
+
+  // ★★★ v8.4 導師總表核心邏輯 ★★★
+  
+  let cachedMasterData = []; // 全域快取資料
+  let selectedSheets = new Set(); // v8.6: 儲存被勾選的分頁 Key (格式: "科目名稱_分頁名稱")
+
+  function openMasterSheet() {
+      document.getElementById('dash-picker').classList.add('hidden');
+      document.getElementById('dash-content-master').classList.remove('hidden');
+      
+      // 如果已經有快取資料，直接顯示，不用重抓
+      if(cachedMasterData.length > 0) {
+          applyMasterFilters();
+      }
+  }
+
+  // 1. 同步資料 (Call Backend)
+  // 1. 同步資料
+  function syncMasterData() {
+      const loading = document.getElementById('master-loading');
+      const empty = document.getElementById('master-empty');
+      const tbody = document.getElementById('master-tbody');
+      
+      loading.classList.remove('hidden');
+      empty.classList.add('hidden');
+      tbody.innerHTML = '';
+
+      google.script.run.withSuccessHandler(res => {
+          loading.classList.add('hidden');
+          if(res.success) {
+              cachedMasterData = res.data;
+              showToast("同步完成", `成功抓取 ${res.data.length} 筆成績`, "success",3000);
+              
+              // 初始化篩選器 (預設全選)
+              initAdvancedFilters(res.data);
+              
+              applyMasterFilters();
+          } else {
+              showToast("同步失敗", res.msg, "error",5000);
+              empty.classList.remove('hidden');
+          }
+      }).apiFetchHomeroomMasterData();
+  }
+
+  // 2. 初始化進階篩選器 (v8.6)
+  function initAdvancedFilters(data) {
+      // 學生下拉 (維持單選)
+      const students = [...new Set(data.map(d => `${d.seatNo}|${d.name}`))].sort((a,b) => Number(a.split('|')[0]) - Number(b.split('|')[0]));
+      const sel = document.getElementById('filter-student');
+      sel.innerHTML = `<option value="all">全部學生</option>`;
+      students.forEach(s => {
+          const [seat, name] = s.split('|');
+          sel.add(new Option(`${seat}號 - ${name}`, s));
+      });
+
+      // 建立 科目 -> 分頁 的結構
+      let sheetMap = {};
+      data.forEach(d => {
+          if(!sheetMap[d.subject]) sheetMap[d.subject] = new Set();
+          sheetMap[d.subject].add(d.sheet);
+      });
+
+      // 生成 Checkbox HTML
+      const container = document.getElementById('filter-container');
+      container.innerHTML = "";
+      selectedSheets.clear(); // 重置選擇
+
+      Object.keys(sheetMap).sort().forEach(subject => {
+          const sheets = [...sheetMap[subject]].sort();
+          
+          // 建立分組卡片
+          const group = document.createElement('div');
+          group.className = "bg-white p-4 rounded-lg shadow-sm border border-slate-200 mb-4";
+          
+          // 標題與全選按鈕
+          group.innerHTML = `
+             <div class="flex justify-between items-center mb-3 pb-2 border-b border-slate-100">
+                <h4 class="font-bold text-slate-700 flex items-center">
+                    <span class="w-1 h-4 bg-blue-500 rounded-full mr-2"></span>${subject}
+                </h4>
+                <button onclick="toggleGroup('${subject}', this)" class="text-xs text-blue-500 hover:underline">全選/取消</button>
+             </div>
+             <div class="grid grid-cols-2 md:grid-cols-3 gap-3" id="group-${subject}"></div>
+          `;
+          
+          container.appendChild(group);
+          const grid = document.getElementById(`group-${subject}`);
+
+          sheets.forEach(sheet => {
+              const key = `${subject}_${sheet}`;
+              selectedSheets.add(key); // 預設全選
+
+              const label = document.createElement('label');
+              label.className = "flex items-center p-2 rounded hover:bg-slate-50 cursor-pointer border border-transparent hover:border-slate-200 transition-all";
+              label.innerHTML = `
+                  <input type="checkbox" value="${key}" class="filter-chk w-4 h-4 text-blue-600 rounded focus:ring-blue-500 border-slate-300 mr-2" checked>
+                  <span class="text-sm text-slate-600 select-none truncate" title="${sheet}">${sheet}</span>
+              `;
+              grid.appendChild(label);
+          });
+      });
+      
+      updateFilterBtnText();
+  }
+
+  // --- 篩選彈窗控制邏輯 ---
+  function openFilterModal() { document.getElementById('filter-modal').classList.remove('hidden'); }
+  function closeFilterModal() { document.getElementById('filter-modal').classList.add('hidden'); }
+  
+  function toggleGroup(subject, btn) {
+      const inputs = document.querySelectorAll(`#group-${subject} input`);
+      // 檢查是否全選，若是則全取消，否則全選
+      const allChecked = Array.from(inputs).every(i => i.checked);
+      inputs.forEach(i => i.checked = !allChecked);
+  }
+
+  function toggleAllFilters(state) {
+      document.querySelectorAll('.filter-chk').forEach(i => i.checked = state);
+  }
+
+  function confirmFilterSelection() {
+      selectedSheets.clear();
+      document.querySelectorAll('.filter-chk:checked').forEach(i => {
+          selectedSheets.add(i.value);
+      });
+      
+      updateFilterBtnText();
+      applyMasterFilters();
+      closeFilterModal();
+  }
+
+  function updateFilterBtnText() {
+      const count = selectedSheets.size;
+      const total = document.querySelectorAll('.filter-chk').length;
+      const btnText = document.getElementById('filter-btn-text');
+      
+      if(count === total) btnText.innerText = "全部分頁";
+      else if(count === 0) btnText.innerText = "無分頁";
+      else btnText.innerText = `已選 ${count} 個分頁`;
+  }
+
+  // 3. 套用篩選 (v8.6)
+  function applyMasterFilters() {
+      const fStudent = document.getElementById('filter-student').value;
+      const keyword = document.getElementById('filter-keyword').value.toLowerCase().trim();
+      const sortMode = document.getElementById('sort-mode').value;
+
+      // A. 篩選 (Filter)
+      let filtered = cachedMasterData.filter(d => {
+          const matchStudent = fStudent === 'all' || `${d.seatNo}|${d.name}` === fStudent;
+          const key = `${d.subject}_${d.sheet}`;
+          const matchSheet = selectedSheets.has(key);
+          const matchKeyword = keyword === "" || 
+                               d.task.toLowerCase().includes(keyword) || 
+                               (d.date && d.date.includes(keyword));
+          return matchStudent && matchSheet && matchKeyword;
+      });
+
+      // B. 排序 (Sort)
+      filtered.sort((a, b) => {
+          // ★★★ v8.8: 作業分組排序 ★★★
+          if (sortMode === 'task') {
+             // 1. 先比對作業名稱 (使用中文語系排序)
+             const res = a.task.localeCompare(b.task, "zh-TW");
+             if (res !== 0) return res;
+             
+             // 2. 作業名稱相同時，依照座號排序
+             const seatA = parseInt(a.seatNo);
+             const seatB = parseInt(b.seatNo);
+             if (!isNaN(seatA) && !isNaN(seatB)) return seatA - seatB;
+             return a.seatNo.localeCompare(b.seatNo);
+          }
+
+          // 其他既有排序邏輯
+          if (sortMode === 'score-desc') return b.score - a.score;
+          if (sortMode === 'score-asc') return a.score - b.score;
+          
+          if (sortMode === 'date-desc' || sortMode === 'date-asc') {
+             if (!a.date) return 1;
+             if (!b.date) return -1;
+             const res = a.date.localeCompare(b.date);
+             return sortMode === 'date-desc' ? -res : res;
+          }
+          
+          // Default: 座號
+          const seatA = parseInt(a.seatNo);
+          const seatB = parseInt(b.seatNo);
+          if (!isNaN(seatA) && !isNaN(seatB)) return (seatA - seatB) || a.subject.localeCompare(b.subject);
+          return a.seatNo.localeCompare(b.seatNo);
+      });
+
+      renderMasterRows(filtered);
+  }
+
+  // v8.5 renderMasterRows
+  function renderMasterRows(data) {
+      const tbody = document.getElementById('master-tbody');
+      const statusDiv = document.getElementById('master-status');
+      
+      document.getElementById('count-display').innerText = data.length;
+      document.getElementById('count-fail').innerText = data.filter(d => Number(d.score) < 60).length;
+      
+      if(data.length === 0) {
+          tbody.innerHTML = `<tr><td colspan="8" class="p-8 text-center text-slate-400">沒有符合條件的資料</td></tr>`;
+          return;
+      }
+
+      let html = data.map((d, i) => {
+          const score = Number(d.score);
+          const isFail = !isNaN(score) && score < 60;
+          const scoreClass = isFail ? "text-red-600 font-bold bg-red-50" : "text-slate-700 font-bold";
+          
+          let rankHtml = `<span class="text-slate-500">${d.rank}</span>`;
+          if (d.rank === 1) rankHtml = `<span class="bg-yellow-100 text-yellow-700 px-2 py-0.5 rounded-full text-xs font-bold">🥇 1</span>`;
+          else if (d.rank === 2) rankHtml = `<span class="bg-gray-100 text-slate-600 px-2 py-0.5 rounded-full text-xs font-bold">🥈 2</span>`;
+          else if (d.rank === 3) rankHtml = `<span class="bg-orange-50 text-orange-700 px-2 py-0.5 rounded-full text-xs font-bold">🥉 3</span>`;
+
+          const statsJson = JSON.stringify(d.stats).replace(/"/g, '&quot;');
+          const infoJson = JSON.stringify({t:d.task, s:d.subject, sh:d.sheet}).replace(/"/g, '&quot;');
+          
+          // 日期顯示 (若無日期顯示 - )
+          const dateHtml = d.date ? `<span class="text-slate-600 font-mono bg-slate-50 px-1 rounded">${d.date}</span>` : `<span class="text-slate-300">-</span>`;
+
+          return `
+            <tr class="hover:bg-blue-50 border-b border-slate-50 transition-colors group">
+                <td class="p-3 text-center font-mono text-slate-500">${d.seatNo}</td>
+                <td class="p-3 font-bold text-slate-700">${d.name}</td>
+                <td class="p-3"><span class="bg-purple-100 text-purple-700 text-xs px-2 py-1 rounded">${d.subject}</span></td>
+                
+                <td class="p-3 text-center">${dateHtml}</td>
+                
+                <td class="p-3 text-xs text-slate-500 truncate max-w-[150px]" title="${d.sheet}">${d.sheet}</td>
+                <td class="p-3 text-sm text-slate-600 cursor-pointer" onclick="openStatsModal(${statsJson}, ${infoJson})">
+                    <span class="group-hover:text-blue-600 transition-colors border-b border-dashed border-transparent group-hover:border-blue-400">
+                        ${d.task} <i class="fa-solid fa-chart-simple ml-1 text-slate-300 group-hover:text-blue-500"></i>
+                    </span>
+                </td>
+                <td class="p-3 text-center ${scoreClass}">${d.score}</td>
+                <td class="p-3 text-center">${rankHtml}</td>
+            </tr>
+          `;
+      }).join('');
+
+      tbody.innerHTML = html;
+      statusDiv.innerText = `最後更新：${new Date().toLocaleTimeString()}`;
+  }
+  
+  function openStatsModal(stats, info) {
+      if(!stats) return showToast("無數據", "此項目無法計算統計資料", "warning",5000);
+      document.getElementById('stats-modal').classList.remove('hidden');
+      document.getElementById('st-task').innerText = info.t;
+      document.getElementById('st-sub').innerText = `${info.s} / ${info.sh}`;
+      document.getElementById('st-avg').innerText = stats.avg;
+      document.getElementById('st-max').innerText = stats.max;
+      document.getElementById('st-min').innerText = stats.min;
+      if(stats.five) {
+          document.getElementById('st-p88').innerText = stats.five.top;
+          document.getElementById('st-p75').innerText = stats.five.front;
+          document.getElementById('st-p50').innerText = stats.five.avg;
+          document.getElementById('st-p25').innerText = stats.five.back;
+          document.getElementById('st-p12').innerText = stats.five.bottom;
+      }
+      const distEl = document.getElementById('st-dist');
+      const maxCount = Math.max(...Object.values(stats.dist));
+      const labels = { '100':'100分', '90-99':'90-99', '80-89':'80-89', '70-79':'70-79', '60-69':'60-69', 'below60':'不及格' };
+      const colors = { '100':'bg-green-500', '90-99':'bg-green-400', '80-89':'bg-blue-400', '70-79':'bg-blue-300', '60-69':'bg-yellow-400', 'below60':'bg-red-400' };
+      let html = "";
+      Object.keys(labels).forEach(k => {
+          const count = stats.dist[k];
+          const pct = maxCount > 0 ? (count / maxCount) * 100 : 0;
+          html += `<div class="flex items-center"><div class="w-12 text-slate-500 text-right mr-2">${labels[k]}</div><div class="flex-1 bg-slate-100 rounded-full h-2 overflow-hidden"><div class="${colors[k]} h-full rounded-full" style="width: ${pct}%"></div></div><div class="w-6 text-left ml-2 font-bold text-slate-600">${count}</div></div>`;
+      });
+      distEl.innerHTML = html;
+  }
+
+  // ★★★ v10.5: 開啟資料庫設定 Modal ★★★
+  function openDbConfigModal() {
+      document.getElementById('db-config-modal').classList.remove('hidden');
+      
+      // 讀取目前的設定
+      if(typeof loadDbConfig === 'function') loadDbConfig();
+  }
+
+  function testDbLink() {
+      const url = document.getElementById('db-url').value.trim();
+      if(!url) return showToast("錯誤", "請輸入網址", "error",5000);
+      window.open(url, '_blank');
+  }
+  const originalLoadDbConfig = window.loadDbConfig;
+  window.loadDbConfig = function() {
+      google.script.run.withSuccessHandler(url => {
+          if(url) {
+              const input = document.getElementById('db-url');
+              if(input) input.value = url;
+              
+              // 嘗試讀取最後更新時間 (可選，需後端支援，目前先顯示靜態文字)
+              const statusDiv = document.getElementById('db-last-sync');
+              if(statusDiv) statusDiv.innerText = "最後同步：(請參考資料庫檔案)";
+          }
+      }).apiGetDbUrl();
+  }
+</script>

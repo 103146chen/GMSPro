@@ -1,0 +1,20 @@
+<div id="view-templates" class="view-section hidden max-w-5xl mx-auto space-y-6">
+  <div class="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
+     <div class="flex justify-between items-center mb-6">
+       <h3 class="font-bold text-lg text-slate-700 border-l-4 border-pink-500 pl-3">信件模板設定</h3>
+       <button onclick="saveTemplates()" class="bg-pink-600 hover:bg-pink-700 text-white px-4 py-2 rounded font-bold text-sm"><i class="fa-solid fa-save mr-1"></i> 儲存設定</button>
+     </div>
+     <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
+       <div class="space-y-3">
+         <h4 class="font-bold text-amber-600"><i class="fa-solid fa-triangle-exclamation mr-1"></i>缺交通知信</h4>
+         <input id="tpl-missing-sub" class="w-full border rounded p-2 text-sm font-bold focus:ring-2 focus:ring-amber-500 outline-none" placeholder="信件主旨">
+         <textarea id="tpl-missing-body" class="w-full h-96 border rounded p-2 text-sm focus:ring-2 focus:ring-amber-500 outline-none custom-scrollbar" placeholder="信件內文... (支援 {{姓名}} 等變數)"></textarea>
+       </div>
+       <div class="space-y-3">
+         <h4 class="font-bold text-blue-600"><i class="fa-solid fa-envelope-open-text mr-1"></i>成績通知信</h4>
+         <input id="tpl-report-sub" class="w-full border rounded p-2 text-sm font-bold focus:ring-2 focus:ring-blue-500 outline-none" placeholder="信件主旨">
+         <textarea id="tpl-report-body" class="w-full h-96 border rounded p-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none custom-scrollbar" placeholder="信件內文..."></textarea>
+       </div>
+     </div>
+  </div>
+</div>

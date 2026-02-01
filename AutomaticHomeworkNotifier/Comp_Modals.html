@@ -1,0 +1,296 @@
+<div id="batch-config-modal"
+  class="fixed inset-0 bg-slate-900/50 z-50 hidden flex items-center justify-center p-4 backdrop-blur-sm">
+  <div
+    class="bg-white rounded-xl shadow-2xl w-full max-w-7xl h-[90vh] flex flex-col overflow-hidden animate-[modal-enter_0.3s_ease-out]">
+    <div class="bg-slate-800 text-white px-6 py-4 flex justify-between items-center flex-shrink-0">
+      <div>
+        <h3 class="text-xl font-bold"><i class="fa-solid fa-list-check mr-2"></i>連結項目批次設定</h3>
+        <p class="text-slate-300 text-xs mt-1">快速調整所有連結班級的參數，可同時指派為任課與導師。</p>
+      </div>
+      <button onclick="document.getElementById('batch-config-modal').classList.add('hidden')"
+        class="text-slate-400 hover:text-white"><i class="fa-solid fa-xmark text-2xl"></i></button>
+    </div>
+
+    <div class="flex-1 overflow-auto custom-scrollbar p-6 bg-slate-100">
+      <div class="bg-white rounded-lg shadow overflow-hidden">
+        <table class="w-full text-sm text-left">
+          <thead class="bg-slate-50 text-slate-600 font-bold border-b sticky top-0 z-10 shadow-sm">
+            <tr>
+              <th class="p-3 w-10">#</th>
+              <th class="p-3 w-32">目前狀態</th>
+              <th class="p-3 w-40">連結身分 (複選)</th>
+              <th class="p-3 w-40">顯示名稱</th>
+              <th class="p-3 w-20">寬限</th>
+              <th class="p-3 w-40">CC 副本</th>
+              <th class="p-3">監控分頁 (Tag Input)</th>
+            </tr>
+          </thead>
+          <tbody id="batch-config-tbody" class="divide-y divide-slate-100">
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="border-t border-slate-200 p-4 bg-white flex justify-end gap-4 flex-shrink-0">
+      <button onclick="document.getElementById('batch-config-modal').classList.add('hidden')"
+        class="px-6 py-2 border border-slate-300 rounded text-slate-600 font-bold hover:bg-slate-50">取消</button>
+      <button onclick="saveBatchConfigs()" id="btn-save-batch-cfg"
+        class="px-8 py-2 bg-blue-600 text-white rounded font-bold hover:bg-blue-700 shadow-lg flex items-center"><i
+          class="fa-solid fa-floppy-disk mr-2"></i> 儲存所有變更</button>
+    </div>
+  </div>
+</div>
+
+<div id="preview-modal"
+  class="fixed inset-0 bg-slate-900/50 z-50 hidden flex items-center justify-center p-4 backdrop-blur-sm">
+  <div
+    class="bg-white rounded-xl shadow-2xl w-full max-w-6xl h-[95vh] flex flex-col overflow-hidden animate-[modal-enter_0.3s_ease-out]">
+    <div class="bg-slate-800 text-white px-6 py-3 flex justify-between items-center flex-shrink-0">
+      <div>
+        <h3 class="text-lg font-bold" id="modal-title">發送預覽</h3>
+      </div>
+      <button onclick="closeModal()" class="text-slate-400 hover:text-white"><i
+          class="fa-solid fa-xmark text-xl"></i></button>
+    </div>
+    <div class="flex-1 flex overflow-hidden">
+      <div class="w-1/4 border-r border-slate-200 bg-slate-50 flex flex-col">
+        <div class="p-3 border-b font-bold text-sm text-slate-600 flex justify-between"><span>收件人</span><span
+            id="modal-count" class="bg-slate-200 px-2 rounded text-xs py-0.5">0</span></div>
+        <div id="modal-list" class="flex-1 overflow-y-auto custom-scrollbar"></div>
+      </div>
+      <div class="w-3/4 bg-slate-100 flex flex-col overflow-hidden relative">
+        <div class="p-4 bg-white border-b shadow-sm flex flex-col gap-2 flex-shrink-0 z-10">
+          <div class="flex justify-between items-center text-xs font-bold text-slate-500 mb-1">
+            <span><i class="fa-solid fa-pen-to-square"></i> 本次發送內容調整
+              (不會影響模板)</span>
+            <span id="cc-indicator" class="hidden font-normal bg-slate-200 px-2 py-0.5 rounded">CC:
+              ...</span>
+          </div>
+          <input id="modal-input-sub"
+            class="border rounded p-2 text-sm font-bold w-full focus:ring-2 focus:ring-blue-500 outline-none"
+            placeholder="信件主旨" oninput="renderModalPreview()">
+          <textarea id="modal-input-body"
+            class="border rounded p-2 text-sm w-full h-24 focus:ring-2 focus:ring-blue-500 outline-none resize-none"
+            placeholder="信件內文" oninput="renderModalPreview()"></textarea>
+        </div>
+        <div class="flex-1 p-8 overflow-auto custom-scrollbar flex flex-col items-center">
+          <div class="flex gap-2 mb-4 self-end">
+            <button onclick="changeModalPreview(-1)" class="w-8 h-8 bg-white rounded-full shadow hover:bg-blue-50"><i
+                class="fa-solid fa-chevron-left"></i></button>
+            <button onclick="changeModalPreview(1)" class="w-8 h-8 bg-white rounded-full shadow hover:bg-blue-50"><i
+                class="fa-solid fa-chevron-right"></i></button>
+          </div>
+          <div id="modal-email-preview" class="bg-white shadow-lg w-full max-w-2xl h-fit min-h-[400px] transition-all">
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="border-t border-slate-200 p-4 bg-white flex justify-end gap-4 flex-shrink-0">
+      <button onclick="closeModal()"
+        class="px-6 py-2 border border-slate-300 rounded text-slate-600 font-bold hover:bg-slate-50">取消</button>
+      <button onclick="confirmSendBatch()" id="btn-modal-send"
+        class="px-8 py-2 bg-blue-600 text-white rounded font-bold hover:bg-blue-700 shadow-lg flex items-center">
+        <i class="fa-solid fa-paper-plane mr-2"></i> 確認發送所有信件
+      </button>
+    </div>
+  </div>
+</div>
+
+<div id="filter-modal"
+  class="fixed inset-0 bg-slate-900/50 z-50 hidden flex items-center justify-center p-4 backdrop-blur-sm">
+  <div
+    class="bg-white rounded-xl shadow-2xl w-full max-w-2xl h-[80vh] flex flex-col overflow-hidden animate-[modal-enter_0.3s_ease-out]">
+    <div class="bg-slate-800 text-white px-6 py-4 flex justify-between items-center flex-shrink-0">
+      <div>
+        <h3 class="text-lg font-bold"><i class="fa-solid fa-filter mr-2"></i>選擇要顯示的分頁</h3>
+        <p class="text-slate-400 text-xs mt-1">請勾選各科目中您想查看的成績分頁</p>
+      </div>
+      <button onclick="closeFilterModal()" class="text-slate-400 hover:text-white"><i
+          class="fa-solid fa-xmark text-xl"></i></button>
+    </div>
+
+    <div class="flex-1 overflow-y-auto custom-scrollbar p-6 bg-slate-50" id="filter-container">
+    </div>
+
+    <div class="border-t border-slate-200 p-4 bg-white flex justify-between gap-4 flex-shrink-0">
+      <div class="flex gap-2">
+        <button onclick="toggleAllFilters(true)"
+          class="text-xs bg-slate-100 hover:bg-slate-200 text-slate-600 px-3 py-1.5 rounded">全選</button>
+        <button onclick="toggleAllFilters(false)"
+          class="text-xs bg-slate-100 hover:bg-slate-200 text-slate-600 px-3 py-1.5 rounded">全不選</button>
+      </div>
+      <button onclick="confirmFilterSelection()"
+        class="px-8 py-2 bg-blue-600 text-white rounded font-bold hover:bg-blue-700 shadow-lg">套用篩選</button>
+    </div>
+  </div>
+</div>
+<div id="sync-selector-modal" class="fixed inset-0 bg-slate-900/50 z-50 hidden flex items-center justify-center p-4 backdrop-blur-sm">
+  <div class="bg-white rounded-xl shadow-2xl w-full max-w-4xl h-[85vh] flex flex-col overflow-hidden animate-[modal-enter_0.3s_ease-out]">
+    <div class="bg-gradient-to-r from-blue-700 to-indigo-800 text-white px-6 py-4 flex justify-between items-center flex-shrink-0">
+      <div>
+        <h3 class="text-xl font-bold"><i class="fa-solid fa-cloud-arrow-up mr-2"></i>選擇要同步的內容</h3>
+        <p class="text-blue-200 text-xs mt-1">請勾選各科目要同步到家長端的分頁 (設定將自動儲存)</p>
+      </div>
+      <button onclick="document.getElementById('sync-selector-modal').classList.add('hidden')" class="text-blue-300 hover:text-white"><i class="fa-solid fa-xmark text-2xl"></i></button>
+    </div>
+
+    <div class="flex-1 overflow-auto custom-scrollbar p-6 bg-slate-100" id="sync-selector-body">
+       <div class="text-center py-12"><div class="loader mx-auto mb-4"></div><p class="text-slate-500">正在讀取各科分頁資料...</p></div>
+    </div>
+
+    <div class="border-t border-slate-200 p-4 bg-white flex justify-end gap-4 flex-shrink-0">
+      <button onclick="document.getElementById('sync-selector-modal').classList.add('hidden')" class="px-6 py-2 border border-slate-300 rounded text-slate-600 font-bold hover:bg-slate-50">取消</button>
+      <button onclick="confirmSyncExecution()" id="btn-confirm-sync" class="px-8 py-2 bg-blue-600 text-white rounded font-bold hover:bg-blue-700 shadow-lg flex items-center">
+          <i class="fa-solid fa-check mr-2"></i> 儲存設定並開始同步
+      </button>
+    </div>
+  </div>
+</div>
+
+<div id="db-config-modal" class="fixed inset-0 bg-slate-900/50 z-50 hidden flex items-center justify-center p-4 backdrop-blur-sm">
+  <div class="bg-white rounded-xl shadow-2xl w-full max-w-2xl overflow-hidden animate-[modal-enter_0.3s_ease-out]">
+      
+      <div class="bg-gradient-to-r from-slate-800 to-slate-900 text-white px-6 py-4 flex justify-between items-center">
+          <div>
+              <h3 class="text-lg font-bold"><i class="fa-solid fa-server mr-2 text-green-400"></i>家長查詢資料庫設定</h3>
+              <p class="text-slate-400 text-xs mt-1">設定雲端資料庫位置，並執行資料同步。</p>
+          </div>
+          <button onclick="document.getElementById('db-config-modal').classList.add('hidden')" class="text-slate-400 hover:text-white"><i class="fa-solid fa-xmark text-xl"></i></button>
+      </div>
+
+      <div class="p-8 space-y-6">
+          <div class="bg-blue-50 border-l-4 border-blue-500 p-4 text-sm text-blue-800">
+              <i class="fa-solid fa-circle-info mr-1"></i>
+              請將彙整好的成績資料同步至外部的 Google Sheet，以供家長查詢端讀取。<br>
+              <span class="text-xs text-blue-600 mt-1 block pl-5">資料將經過加密處理，確保隱私安全。</span>
+          </div>
+
+          <div>
+              <label class="block text-xs font-bold text-slate-500 mb-2">中繼資料庫網址 (Spreadsheet URL)</label>
+              <div class="flex gap-2">
+                  <input id="db-url" class="flex-1 border border-slate-300 rounded px-3 py-2 text-sm outline-none focus:border-blue-500 font-mono text-slate-600" placeholder="https://docs.google.com/spreadsheets/d/...">
+                  <button onclick="testDbLink()" class="px-3 py-2 bg-slate-100 hover:bg-slate-200 rounded text-slate-600 text-sm font-bold border border-slate-300">測試連結</button>
+              </div>
+              <div class="flex justify-between mt-2 items-center">
+                  <button onclick="jumpToDbCreator()" class="text-xs text-emerald-600 hover:text-emerald-800 hover:underline flex items-center font-bold">
+                      <i class="fa-solid fa-plus-circle mr-1"></i> 還沒建立？點此立即建立
+                  </button>
+                  
+                  <div id="db-last-sync" class="text-xs text-slate-400">最後同步：讀取中...</div>
+              </div>
+          </div>
+      </div>
+
+      <div class="bg-slate-50 p-4 border-t border-slate-200 flex justify-end gap-3">
+          <button onclick="document.getElementById('db-config-modal').classList.add('hidden')" class="px-5 py-2 text-slate-500 hover:text-slate-700 font-bold text-sm">關閉</button>
+          <button onclick="syncToDatabase()" id="btn-db-sync" class="px-6 py-2 bg-green-600 hover:bg-green-700 text-white rounded font-bold shadow-lg flex items-center transition-transform active:scale-95">
+              <i class="fa-solid fa-cloud-arrow-up mr-2"></i> 儲存設定並開始同步
+          </button>
+      </div>
+  </div>
+</div>
+
+<div id="drive-browser-modal" class="fixed inset-0 bg-slate-900/50 z-50 hidden flex items-center justify-center p-4 backdrop-blur-sm">
+  <div class="bg-white rounded-xl shadow-2xl w-full max-w-lg overflow-hidden flex flex-col h-[70vh] animate-[modal-enter_0.3s_ease-out]">
+      
+      <div class="bg-slate-800 text-white px-5 py-3 flex justify-between items-center flex-shrink-0">
+          <div>
+              <h3 class="text-lg font-bold"><i class="fa-brands fa-google-drive mr-2"></i>選擇儲存位置</h3>
+          </div>
+          <button onclick="document.getElementById('drive-browser-modal').classList.add('hidden')" class="text-slate-400 hover:text-white"><i class="fa-solid fa-xmark text-xl"></i></button>
+      </div>
+
+      <div class="bg-slate-100 px-4 py-2 border-b border-slate-200 flex items-center gap-2 text-sm text-slate-600 flex-shrink-0">
+          <button onclick="loadDriveFolder(null)" class="hover:text-blue-600" title="回根目錄"><i class="fa-solid fa-house"></i></button>
+          <span class="text-slate-300">/</span>
+          <span id="browser-current-name" class="font-bold truncate max-w-[200px]">讀取中...</span>
+      </div>
+
+      <div class="flex-1 overflow-y-auto custom-scrollbar p-2" id="browser-list">
+          <div class="text-center py-10 text-slate-400"><i class="fa-solid fa-circle-notch fa-spin mr-2"></i>讀取資料夾中...</div>
+      </div>
+
+      <div class="bg-white border-t border-slate-200 p-4 flex justify-between items-center flex-shrink-0">
+          <div class="text-xs text-slate-400">
+              <span id="browser-count">0</span> 個子資料夾
+          </div>
+          <div class="flex gap-2">
+              <button onclick="document.getElementById('drive-browser-modal').classList.add('hidden')" class="px-4 py-2 text-slate-500 hover:bg-slate-50 rounded font-bold text-sm">取消</button>
+              <button onclick="confirmFolderSelection()" id="btn-browser-select" class="px-6 py-2 bg-amber-500 hover:bg-amber-600 text-white rounded font-bold shadow-md text-sm flex items-center">
+                  <i class="fa-solid fa-check mr-2"></i> 選擇此資料夾
+              </button>
+          </div>
+      </div>
+  </div>
+</div>
+<div id="config-modal" class="fixed inset-0 bg-slate-900/50 z-50 hidden flex items-center justify-center p-4 backdrop-blur-sm">
+  <div class="bg-white rounded-xl shadow-2xl w-full max-w-lg animate-[modal-enter_0.3s_ease-out] overflow-hidden flex flex-col max-h-[90vh]">
+    <div class="bg-slate-800 text-white px-6 py-4 flex justify-between items-center flex-shrink-0">
+      <h3 class="font-bold text-lg" id="modal-title">設定連結</h3>
+      <button onclick="document.getElementById('config-modal').classList.add('hidden')" class="text-slate-400 hover:text-white"><i class="fa-solid fa-xmark text-xl"></i></button>
+    </div>
+    
+    <div class="p-6 space-y-4 overflow-y-auto custom-scrollbar">
+      <input type="hidden" id="cfg-original-role">
+      <input type="hidden" id="cfg-original-name">
+      
+      <div>
+        <label class="block text-xs font-bold text-slate-500 mb-1">檔案標題 (顯示名稱)</label>
+        <input id="cfg-name" type="text" class="w-full border border-slate-300 rounded p-2 text-sm focus:border-blue-500 outline-none font-bold placeholder-slate-300" placeholder="例如：一年一班國文成績">
+      </div>
+      
+      <div>
+        <label class="block text-xs font-bold text-slate-500 mb-1">Google Sheet 網址</label>
+        <div class="flex gap-2">
+            <input id="cfg-url" type="text" class="flex-1 border border-slate-300 rounded p-2 text-sm focus:border-blue-500 outline-none font-mono text-xs placeholder-slate-300" placeholder="https://docs.google.com/...">
+            <button onclick="window.open(document.getElementById('cfg-url').value, '_blank')" class="text-slate-400 hover:text-blue-500" title="開啟連結"><i class="fa-solid fa-external-link-alt"></i></button>
+        </div>
+      </div>
+
+      <div class="bg-slate-50 p-3 rounded border border-slate-200">
+          <label class="block text-xs font-bold text-slate-500 mb-2">連結身分 (可複選)</label>
+          <div class="flex gap-4">
+              <label class="flex items-center cursor-pointer">
+                  <input type="checkbox" id="chk-role-subject" class="w-4 h-4 text-blue-600 rounded focus:ring-blue-500 border-gray-300">
+                  <span class="ml-2 text-sm font-bold text-slate-700">🔵 任課班級 <span class="text-xs font-normal text-slate-400">(寄缺交)</span></span>
+              </label>
+              <label class="flex items-center cursor-pointer">
+                  <input type="checkbox" id="chk-role-homeroom" class="w-4 h-4 text-purple-600 rounded focus:ring-purple-500 border-gray-300">
+                  <span class="ml-2 text-sm font-bold text-slate-700">🟣 導師科目 <span class="text-xs font-normal text-slate-400">(全班彙整)</span></span>
+              </label>
+          </div>
+      </div>
+
+      <div class="grid grid-cols-2 gap-4">
+         <div>
+            <label class="block text-xs font-bold text-slate-500 mb-1">寬限天數 (任課用)</label>
+            <input id="cfg-days" type="number" class="w-full border border-slate-300 rounded p-2 text-sm focus:border-blue-500 outline-none" value="7">
+         </div>
+         <div>
+             </div>
+      </div>
+      
+      <div>
+         <div class="flex justify-between items-end mb-1">
+             <label class="block text-xs font-bold text-slate-500">監控/彙整分頁</label>
+             <button id="btn-refresh-sheets" onclick="refreshSheetListInModal()" class="text-[10px] bg-slate-100 hover:bg-slate-200 px-2 py-0.5 rounded text-slate-600"><i class="fa-solid fa-arrows-rotate mr-1"></i>讀取分頁</button>
+         </div>
+         <div id="cfg-sheets-area" class="border border-slate-300 rounded p-2 h-32 overflow-y-auto bg-slate-50 text-sm">
+             <p class="text-slate-400 text-xs text-center mt-10">請點擊上方按鈕讀取...</p>
+         </div>
+      </div>
+      
+      <div id="area-cfg-extra" class="pt-4 border-t border-slate-100">
+         <label class="block text-xs font-bold text-slate-500 mb-1">Email 副本 (CC) / 共同教師</label>
+         <input id="cfg-cc" type="text" class="w-full border border-slate-300 rounded p-2 text-sm focus:border-blue-500 outline-none placeholder-slate-300" placeholder="老師 Email (多筆用逗號隔開)">
+      </div>
+    </div>
+
+    <div class="bg-slate-50 p-4 border-t border-slate-200 flex justify-end gap-3 flex-shrink-0">
+       <button onclick="document.getElementById('config-modal').classList.add('hidden')" class="px-4 py-2 text-slate-500 hover:bg-slate-100 rounded text-sm font-bold">取消</button>
+       <button onclick="confirmSaveConfig()" id="btn-save-cfg" class="px-6 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded text-sm font-bold shadow-md flex items-center">
+         <i class="fa-solid fa-check mr-2"></i> 儲存
+       </button>
+    </div>
+  </div>
+</div>

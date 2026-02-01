@@ -1,0 +1,64 @@
+<div id="view-link" class="view-section hidden max-w-7xl mx-auto space-y-8 pb-20">
+   
+   <div class="flex flex-col md:flex-row justify-between items-end md:items-center gap-4 bg-white p-6 rounded-2xl shadow-sm border border-slate-100">
+      <div>
+         <h3 class="font-bold text-slate-800 text-2xl tracking-tight"><i class="fa-solid fa-link text-indigo-500 mr-3"></i>連結管理中心</h3>
+         <p class="text-slate-500 text-sm mt-1">集中管理所有成績連結，支援多重身分指派。</p>
+      </div>
+      <div class="flex gap-3 w-full md:w-auto">
+         <button onclick="openManualLinkModal()" class="flex-1 md:flex-none text-sm bg-white hover:bg-slate-50 text-slate-600 hover:text-indigo-600 px-5 py-2.5 rounded-xl font-bold border border-slate-200 hover:border-indigo-200 transition-all shadow-sm flex items-center justify-center group">
+            <div class="w-6 h-6 rounded-full bg-slate-100 group-hover:bg-indigo-100 text-slate-400 group-hover:text-indigo-600 flex items-center justify-center mr-2 transition-colors">
+                <i class="fa-solid fa-plus text-xs"></i>
+            </div>
+            新增連結
+         </button>
+         <button onclick="openBatchConfigModal()" class="flex-1 md:flex-none text-sm bg-indigo-600 hover:bg-indigo-700 text-white px-5 py-2.5 rounded-xl font-bold shadow-indigo-200 shadow-lg hover:shadow-xl transition-all flex items-center justify-center active:scale-95">
+            <i class="fa-solid fa-list-check mr-2"></i> 批次管理
+         </button>
+      </div>
+   </div>
+
+   <div id="area-pending" class="hidden animate-fade-in">
+      <div class="flex items-center gap-3 mb-4 pl-1">
+         <span class="bg-amber-100 text-amber-700 px-3 py-1 rounded-full text-xs font-bold shadow-sm border border-amber-200 animate-pulse">
+            <i class="fa-solid fa-bell mr-1"></i>待處理
+         </span>
+         <div class="h-px bg-slate-200 flex-1"></div>
+      </div>
+      <div id="pending-list" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5"></div>
+   </div>
+
+   <div id="area-subject" class="animate-fade-in">
+      <div class="flex items-center gap-3 mb-4 pl-1">
+         <div class="flex items-center gap-2">
+            <div class="w-8 h-8 rounded-lg bg-blue-100 text-blue-600 flex items-center justify-center"><i class="fa-solid fa-chalkboard-user"></i></div>
+            <h4 class="font-bold text-slate-700 text-lg">任課班級</h4>
+         </div>
+         <span class="text-xs bg-slate-100 text-slate-500 px-2 py-0.5 rounded">寄發缺交通知</span>
+         <div class="h-px bg-slate-200 flex-1"></div>
+      </div>
+      <div id="subject-list" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5 mb-10"></div>
+      
+      <div id="subject-empty" class="hidden flex flex-col items-center justify-center py-12 bg-slate-50 rounded-2xl border-2 border-dashed border-slate-200">
+          <div class="w-16 h-16 bg-slate-100 rounded-full flex items-center justify-center text-slate-300 text-3xl mb-3"><i class="fa-solid fa-folder-open"></i></div>
+          <p class="text-slate-400 font-bold text-sm">目前沒有任課連結</p>
+      </div>
+   </div>
+
+   <div id="area-homeroom" class="animate-fade-in">
+      <div class="flex items-center gap-3 mb-4 pl-1">
+         <div class="flex items-center gap-2">
+            <div class="w-8 h-8 rounded-lg bg-purple-100 text-purple-600 flex items-center justify-center"><i class="fa-solid fa-users"></i></div>
+            <h4 class="font-bold text-slate-700 text-lg">導師科目</h4>
+         </div>
+         <span class="text-xs bg-slate-100 text-slate-500 px-2 py-0.5 rounded">全班成績彙整</span>
+         <div class="h-px bg-slate-200 flex-1"></div>
+      </div>
+      <div id="homeroom-list" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5"></div>
+      
+      <div id="homeroom-empty" class="hidden flex flex-col items-center justify-center py-12 bg-slate-50 rounded-2xl border-2 border-dashed border-slate-200">
+          <div class="w-16 h-16 bg-slate-100 rounded-full flex items-center justify-center text-slate-300 text-3xl mb-3"><i class="fa-solid fa-folder-open"></i></div>
+          <p class="text-slate-400 font-bold text-sm">目前沒有導師連結</p>
+      </div>
+   </div>
+</div>

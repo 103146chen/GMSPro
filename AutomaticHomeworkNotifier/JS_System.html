@@ -1,0 +1,124 @@
+<script>
+    /**
+     * JS_System: 管理系統資安金鑰與查詢端同步工具
+     */
+
+    function renderSystemView() {
+        checkSaltStatus();
+    }
+
+    function checkSaltStatus() {
+       const msg = document.getElementById('salt-status-msg');
+       msg.innerHTML = '<i class="fa-solid fa-spinner fa-spin mr-2"></i>檢查狀態中...';
+       
+       google.script.run.withSuccessHandler(res => {
+           if(res.isSet) {
+               msg.innerHTML = '<i class="fa-solid fa-check-circle text-emerald-500 mr-2"></i>系統目前<span class="text-emerald-600">已設定</span>金鑰 (輸入新值可覆蓋)';
+               document.getElementById('btn-copy-config').classList.remove('hidden'); // 顯示同步工具
+           } else {
+               msg.innerHTML = '<i class="fa-solid fa-triangle-exclamation text-amber-500 mr-2"></i>尚未設定金鑰 (建議立即設定)';
+               document.getElementById('btn-copy-config').classList.add('hidden');
+           }
+       }).apiCheckSaltStatus();
+    }
+
+    /**
+     * 複製查詢端所需的設定字串 (Salt + DB_URL)
+     */
+    function copyConfigForPortal() {
+        const btn = document.getElementById('btn-copy-config');
+        const orgHtml = btn.innerHTML;
+        
+        btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin mr-2"></i>讀取中...';
+        btn.disabled = true;
+
+        google.script.run.withSuccessHandler(res => {
+            if (res.success) {
+                navigator.clipboard.writeText(res.text).then(() => {
+                    btn.innerHTML = '<i class="fa-solid fa-check mr-2"></i>已複製設定資訊';
+                    setTimeout(() => { btn.innerHTML = orgHtml; btn.disabled = false; }, 2000);
+                });
+            } else {
+                alert(res.msg);
+                btn.innerHTML = orgHtml;
+                btn.disabled = false;
+            }
+        }).apiGetConfigForCopy();
+    }
+
+    function saveSystemSalt() {
+      const inp = document.getElementById('inp-sys-salt');
+      const btn = document.getElementById('btn-save-salt');
+      const salt = inp.value.trim();
+
+      if (!salt) return showToast("錯誤", "請輸入金鑰內容", "error",5000);
+
+      const orgText = btn.innerHTML;
+      btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin mr-2"></i>儲存中...';
+      btn.disabled = true;
+
+      google.script.run.withSuccessHandler(res => {
+          btn.innerHTML = orgText;
+          btn.disabled = false;
+          if (res.success) {
+            inp.value = "";
+            showToast("成功", "系統金鑰已更新", "success",1000);
+            checkSaltStatus();
+          } else {
+            showToast("失敗", res.msg, "error",5000);
+          }
+      }).apiSaveSystemSalt(salt);
+    }
+
+    function doArchive() {
+        if(!confirm("⚠️ 確定要封存目前的成績資料嗎？\n\n這通常在「新學期開始」時執行。\n舊資料將被移至 History 分頁，查詢端將被清空。")) return;
+
+        const btn = document.getElementById('btn-archive');
+        const orgHtml = btn.innerHTML;
+        btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin mr-2"></i> 處理中...';
+        btn.disabled = true;
+
+        google.script.run.withSuccessHandler(res => {
+            btn.innerHTML = orgHtml;
+            btn.disabled = false;
+            
+            if(res.success) {
+                alert(`✅ 封存成功！\n\n舊資料已移動至 [${res.archiveName}]。\n資料庫已重置，請記得執行「同步最新成績」來匯入新學期資料。`);
+            } else {
+                alert("❌ " + res.msg);
+            }
+        }).apiArchiveDatabase();
+    }
+
+    /**
+     * 手動觸發缺交預覽信
+     */
+    function sendPreviewSummary() {
+        const btn = document.getElementById('btn-test-preview');
+        const orgHtml = btn.innerHTML;
+        
+        // 1. 鎖定按鈕避免重複點擊
+        btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin mr-2"></i> 系統掃描中...';
+        btn.disabled = true;
+        btn.classList.add('bg-slate-100', 'text-slate-400'); // 視覺灰階化
+
+        // 2. 呼叫後端
+        google.script.run.withSuccessHandler(res => {
+            // 3. 還原按鈕
+            btn.innerHTML = '<i class="fa-solid fa-check mr-2"></i> 已發送';
+            setTimeout(() => {
+                btn.innerHTML = orgHtml;
+                btn.disabled = false;
+                btn.classList.remove('bg-slate-100', 'text-slate-400');
+            }, 3000); // 3秒後變回原樣
+            
+            showToast("完成", "預覽信已寄出，請檢查您的信箱", "success",1000);
+            
+        }).withFailureHandler(err => {
+            btn.innerHTML = orgHtml;
+            btn.disabled = false;
+            btn.classList.remove('bg-slate-100', 'text-slate-400');
+            showToast("錯誤", "發送失敗：" + err.message, "error",5000);
+        }).triggerPreviewSummary(); // 呼叫後端剛剛寫好的函式
+    }
+</script>

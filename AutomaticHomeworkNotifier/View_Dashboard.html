@@ -1,0 +1,238 @@
+<div id="view-dashboard" class="view-section space-y-6">
+  
+  <div id="dash-picker" class="max-w-6xl mx-auto">
+     <div class="text-center mb-8 mt-4">
+        <h3 class="text-2xl font-bold text-slate-700 mb-2" id="picker-title">請選擇要管理的項目</h3>
+        <p class="text-slate-500" id="picker-desc">點擊卡片進入管理介面</p>
+     </div>
+     
+     <div id="dash-class-grid" class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
+        </div>
+     
+     <div id="dash-no-data" class="hidden text-center py-12 bg-white rounded-xl border border-dashed border-slate-300">
+        <i class="fa-solid fa-folder-open text-4xl text-slate-300 mb-4"></i>
+        <p class="text-slate-500 mb-4">尚未設定任何連結</p>
+        <button onclick="switchView('link')" class="text-blue-600 font-bold hover:underline">前往連結檔案</button>
+     </div>
+  </div>
+
+  <div id="dash-content" class="hidden flex flex-col items-center animate-[fadeIn_0.3s_ease-out]">
+    
+    <div class="w-full max-w-6xl flex justify-between items-center mb-6">
+        <button onclick="showDashboardPicker()" class="text-slate-500 hover:text-blue-600 font-bold flex items-center transition-colors px-3 py-2 rounded hover:bg-slate-100">
+           <i class="fa-solid fa-arrow-left mr-2"></i> 返回列表
+        </button>
+        <h2 class="text-2xl font-bold text-slate-800 flex items-center">
+            <span class="bg-blue-100 text-blue-600 text-sm px-2 py-1 rounded mr-3 align-middle" id="dash-badge-class">Class</span>
+            <span id="dash-title-class"></span>
+        </h2>
+        <div class="w-24"></div> 
+    </div>
+
+    <div class="w-full max-w-6xl bg-white rounded-t-xl border-b border-slate-200 flex mb-0 shadow-sm">
+        <button onclick="switchDashTab('missing')" id="tab-btn-missing" class="flex-1 py-4 text-center font-bold text-amber-600 border-b-4 border-amber-500 bg-amber-50 transition-all">
+            <i class="fa-solid fa-magnifying-glass-chart mr-2"></i> 作業缺交監控
+        </button>
+        <button onclick="switchDashTab('report')" id="tab-btn-report" class="flex-1 py-4 text-center font-bold text-slate-400 border-b-2 border-transparent hover:text-blue-500 transition-all">
+            <i class="fa-solid fa-envelope-open-text mr-2"></i> 成績通知單
+        </button>
+    </div>
+
+    <div id="dash-tab-missing" class="w-full max-w-6xl bg-white rounded-b-xl shadow-sm border border-t-0 border-slate-200 p-8">
+         <div class="grid grid-cols-1 md:grid-cols-2 gap-8 mb-8">
+             <div class="bg-amber-50 text-amber-800 p-6 rounded-lg border border-amber-100">
+               <h4 class="font-bold mb-2 flex items-center"><i class="fa-solid fa-circle-info mr-2"></i>監控狀態</h4>
+               <p class="text-sm mb-1"><span class="text-slate-400">正在監控分頁：</span></p>
+               <p id="dash-targets" class="font-mono font-bold text-lg mb-3 break-words">--</p>
+               <p class="text-sm"><span class="text-slate-400">寬限天數：</span> <span class="font-bold" id="dash-days">--</span> 天</p>
+             </div>
+             <div class="flex flex-col justify-center items-start space-y-4">
+                 <p class="text-slate-500 text-sm">系統將掃描此科目設定的所有分頁，並可發送缺交提醒。</p>
+                 <button onclick="scanMissing()" id="btn-scan" class="w-full bg-amber-500 hover:bg-amber-600 text-white font-bold px-6 py-4 rounded-lg shadow-lg transition-transform active:scale-95 flex items-center justify-center text-lg">
+                   <i class="fa-solid fa-rocket mr-2"></i> 立即掃描並預覽
+                 </button>
+             </div>
+         </div>
+    </div>
+
+    <div id="dash-tab-report" class="w-full max-w-6xl bg-white rounded-b-xl shadow-sm border border-t-0 border-slate-200 p-6 hidden">
+         <div class="grid grid-cols-1 lg:grid-cols-12 gap-6 h-[650px]">
+            <div class="lg:col-span-2 flex flex-col border-r border-slate-200 pr-4">
+                <h3 class="font-bold text-slate-700 mb-3 flex items-center"><i class="fa-solid fa-table-list mr-2 text-blue-500"></i> 成績分頁</h3>
+                <div id="rpt-sheet-list" class="flex-1 overflow-y-auto space-y-2 custom-scrollbar pr-2"><div class="text-xs text-slate-400 text-center mt-10">載入中...</div></div>
+                <button onclick="loadReportTab()" class="mt-3 text-xs text-blue-500 hover:text-blue-700 flex items-center justify-center py-2 border border-dashed border-blue-200 rounded hover:bg-blue-50 w-full transition-colors"><i class="fa-solid fa-rotate mr-1"></i> 重新讀取列表</button>
+            </div>
+            <div class="lg:col-span-3 flex flex-col border-r border-slate-200 px-4 relative">
+                <h3 class="font-bold text-slate-700 mb-3 flex items-center"><i class="fa-solid fa-check-double mr-2 text-purple-500"></i> 顯示欄位</h3>
+                <div id="col-mask" class="absolute inset-0 bg-white/80 z-10 flex flex-col items-center justify-center text-slate-400 text-sm backdrop-blur-[1px]"><i class="fa-solid fa-arrow-left text-2xl mb-2 animate-bounce"></i>請先選擇左側分頁</div>
+                <div id="column-list" class="flex-1 overflow-y-auto space-y-1 custom-scrollbar pb-4"></div>
+            </div>
+            <div class="lg:col-span-7 flex flex-col pl-2 relative">
+                <div class="flex justify-between items-center mb-3">
+                    <h3 class="font-bold text-slate-700 flex items-center"><i class="fa-solid fa-eye mr-2 text-green-500"></i> 信件預覽</h3>
+                    <div id="preview-status" class="text-xs font-bold text-amber-500 hidden"><i class="fa-solid fa-circle-notch fa-spin mr-1"></i> 更新中...</div>
+                </div>
+                <div class="flex-1 bg-slate-100 border border-slate-200 rounded-lg p-6 overflow-auto mb-4 relative shadow-inner custom-scrollbar flex flex-col items-center">
+                     <div id="simple-preview" class="bg-white shadow-md w-full max-w-xl p-8 text-sm origin-top transition-all min-h-[300px]"><div class="text-slate-300 text-center mt-20">預覽內容將顯示於此</div></div>
+                     <div id="preview-mask" class="absolute inset-0 bg-slate-100/50 z-10 hidden flex items-center justify-center"><div class="loader"></div></div>
+                </div>
+                <button onclick="openBatchModal('report')" id="btn-prepare-send" disabled class="w-full py-4 bg-slate-300 text-white rounded-lg font-bold shadow-none transition-all cursor-not-allowed flex items-center justify-center"><i class="fa-solid fa-paper-plane mr-2"></i> 準備發送成績單</button>
+            </div>
+         </div>
+    </div>
+  </div>
+
+  <div id="dash-content-master" class="hidden flex flex-col items-center animate-[fadeIn_0.3s_ease-out]">
+    
+    <div class="w-full max-w-6xl flex justify-between items-center mb-6">
+        <div class="flex gap-3">
+            <button onclick="showDashboardPicker()" class="text-slate-500 hover:text-blue-600 font-bold flex items-center transition-colors px-3 py-2 rounded hover:bg-slate-100">
+               <i class="fa-solid fa-arrow-left mr-2"></i> 返回總覽
+            </button>
+            <button onclick="openDbConfigModal()" class="bg-slate-800 text-white hover:bg-slate-900 font-bold px-4 py-2 rounded-lg shadow-md transition-all flex items-center gap-2">
+               <i class="fa-solid fa-cloud-arrow-up"></i> 發布/同步
+            </button>
+        </div>
+        
+        <h2 class="text-2xl font-bold text-slate-800 flex items-center">
+            <span class="bg-pink-100 text-pink-600 text-sm px-2 py-1 rounded mr-3 align-middle">Homeroom</span>
+            全班成績總覽
+        </h2>
+        
+        <button onclick="syncMasterData()" class="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2 rounded-lg font-bold shadow-lg transition-all active:scale-95 flex items-center">
+            <i class="fa-solid fa-rotate mr-2"></i> 同步最新成績
+        </button>
+    </div>
+
+    <div class="w-full max-w-6xl bg-white rounded-xl shadow-sm border border-slate-200 flex flex-col h-[75vh] overflow-hidden">
+        
+        <div class="bg-slate-50 p-4 border-b border-slate-200 flex flex-wrap gap-4 items-center" id="master-filters">
+            
+            <div class="flex items-center">
+                <label class="text-xs font-bold text-slate-500 mr-2"><i class="fa-solid fa-user"></i></label>
+                <select id="filter-student" onchange="applyMasterFilters()" class="border border-slate-300 rounded px-2 py-1.5 text-sm outline-none focus:border-blue-500 bg-white w-28">
+                    <option value="all">全部學生</option>
+                </select>
+            </div>
+
+            <div class="flex items-center">
+                <button onclick="openFilterModal()" class="bg-white border border-slate-300 hover:bg-blue-50 text-slate-700 px-3 py-1.5 rounded text-sm font-bold flex items-center transition-colors">
+                    <i class="fa-solid fa-filter mr-2 text-slate-400"></i>
+                    <span id="filter-btn-text">全部分頁</span>
+                </button>
+            </div>
+
+            <div class="flex items-center flex-1 relative">
+                <i class="fa-solid fa-magnifying-glass absolute left-3 text-slate-400"></i>
+                <input id="filter-keyword" oninput="applyMasterFilters()" placeholder="搜尋作業名稱或日期..." class="pl-9 border border-slate-300 rounded px-2 py-1.5 text-sm outline-none focus:border-blue-500 bg-white w-full">
+            </div>
+
+            <div class="flex items-center">
+                <select id="sort-mode" onchange="applyMasterFilters()" class="border border-slate-300 rounded px-2 py-1.5 text-sm outline-none focus:border-blue-500 bg-white font-bold text-slate-600 cursor-pointer">
+                    <option value="seat">排序：座號 (預設)</option>
+                    <option value="task">排序：作業名稱 (相同作業集中)</option>
+                    <option value="date-desc">排序：日期 (新→舊)</option>
+                    <option value="date-asc">排序：日期 (舊→新)</option>
+                    <option value="score-desc">排序：分數 (高→低)</option>
+                    <option value="score-asc">排序：分數 (低→高)</option>
+                </select>
+            </div>
+
+            <div class="text-right text-xs text-slate-400 min-w-[80px]" id="master-status">
+                --
+            </div>
+        </div>
+
+        <div class="flex-1 overflow-auto bg-slate-100 relative custom-scrollbar">
+            
+            <div id="master-loading" class="hidden absolute inset-0 bg-white/80 z-10 flex flex-col items-center justify-center backdrop-blur-sm">
+                <div class="loader mb-4 w-10 h-10 border-4 border-blue-200 border-t-blue-600"></div>
+                <p class="text-slate-600 font-bold animate-pulse">正在從所有試算表抓取資料...</p>
+                <p class="text-xs text-slate-400 mt-2">這可能需要 10~20 秒，請稍候</p>
+            </div>
+
+            <div id="master-empty" class="absolute inset-0 flex flex-col items-center justify-center text-slate-400">
+                <i class="fa-solid fa-cloud-arrow-down text-6xl mb-4 text-slate-300"></i>
+                <p class="text-lg font-bold mb-1">準備就緒</p>
+                <p class="text-sm">請點擊右上角「同步最新成績」按鈕</p>
+            </div>
+            
+            <table class="w-full text-sm text-left border-collapse">
+               <thead class="bg-slate-800 text-white sticky top-0 shadow-md z-0">
+                  <tr>
+                      <th class="p-3 w-16 text-center">座號</th>
+                      <th class="p-3 w-28">姓名</th>
+                      <th class="p-3 w-40">科目</th>
+                      <th class="p-3 w-24 text-center">日期</th>
+                      <th class="p-3 w-40">分頁來源</th>
+                      <th class="p-3">作業名稱 (點擊查看統計)</th>
+                      <th class="p-3 w-20 text-center">分數</th>
+                      <th class="p-3 w-20 text-center">排名</th>
+                  </tr>
+               </thead>
+               <tbody id="master-tbody" class="bg-white divide-y divide-slate-100 text-slate-700">
+                  </tbody>
+            </table>
+        </div>
+        
+        <div class="bg-white p-3 border-t border-slate-200 text-xs text-slate-500 flex justify-between">
+            <span>顯示筆數：<span id="count-display" class="font-bold">0</span></span>
+            <span>不及格筆數：<span id="count-fail" class="font-bold text-red-500">0</span></span>
+        </div>
+    </div>
+  </div>
+
+</div>
+
+<div id="filter-modal" class="fixed inset-0 bg-slate-900/50 z-50 hidden flex items-center justify-center p-4 backdrop-blur-sm">
+  <div class="bg-white rounded-xl shadow-2xl w-full max-w-2xl h-[80vh] flex flex-col overflow-hidden animate-[modal-enter_0.3s_ease-out]">
+    <div class="bg-slate-800 text-white px-6 py-4 flex justify-between items-center flex-shrink-0">
+      <div><h3 class="text-lg font-bold"><i class="fa-solid fa-filter mr-2"></i>選擇要顯示的分頁</h3><p class="text-slate-400 text-xs mt-1">請勾選各科目中您想查看的成績分頁</p></div>
+      <button onclick="closeFilterModal()" class="text-slate-400 hover:text-white"><i class="fa-solid fa-xmark text-xl"></i></button>
+    </div>
+    
+    <div class="flex-1 overflow-y-auto custom-scrollbar p-6 bg-slate-50" id="filter-container"></div>
+
+    <div class="border-t border-slate-200 p-4 bg-white flex justify-between gap-4 flex-shrink-0">
+       <div class="flex gap-2">
+           <button onclick="toggleAllFilters(true)" class="text-xs bg-slate-100 hover:bg-slate-200 text-slate-600 px-3 py-1.5 rounded">全選</button>
+           <button onclick="toggleAllFilters(false)" class="text-xs bg-slate-100 hover:bg-slate-200 text-slate-600 px-3 py-1.5 rounded">全不選</button>
+       </div>
+       <button onclick="confirmFilterSelection()" class="px-8 py-2 bg-blue-600 text-white rounded font-bold hover:bg-blue-700 shadow-lg">套用篩選</button>
+    </div>
+  </div>
+</div>
+
+<div id="stats-modal" class="fixed inset-0 bg-slate-900/50 z-50 hidden flex items-center justify-center p-4 backdrop-blur-sm">
+  <div class="bg-white rounded-xl shadow-2xl w-full max-w-md overflow-hidden animate-[modal-enter_0.3s_ease-out]">
+    <div class="bg-gradient-to-r from-purple-600 to-pink-600 text-white px-5 py-3 flex justify-between items-center">
+      <h3 class="font-bold text-lg"><i class="fa-solid fa-chart-pie mr-2"></i>成績分析</h3>
+      <button onclick="document.getElementById('stats-modal').classList.add('hidden')" class="hover:text-pink-200"><i class="fa-solid fa-xmark text-xl"></i></button>
+    </div>
+    <div class="p-6">
+        <div class="mb-4 pb-4 border-b border-slate-100">
+            <h4 class="font-bold text-slate-800 text-lg mb-1" id="st-task">--</h4>
+            <div class="text-xs text-slate-500" id="st-sub">--</div>
+        </div>
+        <div class="grid grid-cols-3 gap-3 mb-6 text-center">
+            <div class="bg-slate-50 p-2 rounded"><div class="text-xs text-slate-400">平均</div><div class="font-bold text-lg text-blue-600" id="st-avg">--</div></div>
+            <div class="bg-slate-50 p-2 rounded"><div class="text-xs text-slate-400">最高</div><div class="font-bold text-lg text-green-600" id="st-max">--</div></div>
+            <div class="bg-slate-50 p-2 rounded"><div class="text-xs text-slate-400">最低</div><div class="font-bold text-lg text-red-600" id="st-min">--</div></div>
+        </div>
+        <div class="mb-6">
+            <h5 class="text-xs font-bold text-slate-400 mb-2 uppercase">五標數值</h5>
+            <div class="flex justify-between text-sm">
+                <div class="flex flex-col items-center"><div class="w-2 h-8 bg-purple-200 rounded-t relative group"><div class="w-full bg-purple-500 absolute bottom-0" style="height:100%"></div></div><span class="font-bold mt-1" id="st-p88">--</span><span class="text-[10px] text-slate-400">頂</span></div>
+                <div class="flex flex-col items-center"><div class="w-2 h-8 bg-purple-200 rounded-t relative group"><div class="w-full bg-purple-500 absolute bottom-0" style="height:75%"></div></div><span class="font-bold mt-1" id="st-p75">--</span><span class="text-[10px] text-slate-400">前</span></div>
+                <div class="flex flex-col items-center"><div class="w-2 h-8 bg-purple-200 rounded-t relative group"><div class="w-full bg-purple-500 absolute bottom-0" style="height:50%"></div></div><span class="font-bold mt-1" id="st-p50">--</span><span class="text-[10px] text-slate-400">均</span></div>
+                <div class="flex flex-col items-center"><div class="w-2 h-8 bg-purple-200 rounded-t relative group"><div class="w-full bg-purple-500 absolute bottom-0" style="height:25%"></div></div><span class="font-bold mt-1" id="st-p25">--</span><span class="text-[10px] text-slate-400">後</span></div>
+                <div class="flex flex-col items-center"><div class="w-2 h-8 bg-purple-200 rounded-t relative group"><div class="w-full bg-purple-500 absolute bottom-0" style="height:12%"></div></div><span class="font-bold mt-1" id="st-p12">--</span><span class="text-[10px] text-slate-400">底</span></div>
+            </div>
+        </div>
+        <div>
+            <h5 class="text-xs font-bold text-slate-400 mb-2 uppercase">成績分布</h5>
+            <div class="space-y-1 text-xs" id="st-dist"></div>
+        </div>
+    </div>
+  </div>
+</div>

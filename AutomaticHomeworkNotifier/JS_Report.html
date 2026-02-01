@@ -1,0 +1,148 @@
+<script>
+  let isReportLoading = false; // 防抖鎖
+
+  // 處理分頁點擊 (v7.4 防抖與高亮邏輯)
+  function handleSheetClick(btnElement, sheetName) {
+    if(isReportLoading) return; // 鎖定中
+    isReportLoading = true;
+
+    // 1. UI 鎖定與回饋
+    const allBtns = document.querySelectorAll('.sheet-btn');
+    allBtns.forEach(b => {
+        b.disabled = true;
+        b.classList.add('opacity-50', 'cursor-wait');
+        b.classList.remove('bg-blue-600', 'text-white', 'shadow-md'); // 移除舊高亮
+        // 恢復預設樣式
+        if(!b.classList.contains('text-slate-600')) b.classList.add('text-slate-600', 'hover:bg-blue-50');
+    });
+
+    // 設定當前按鈕高亮
+    btnElement.classList.remove('text-slate-600', 'hover:bg-blue-50', 'opacity-50');
+    btnElement.classList.add('bg-blue-600', 'text-white', 'shadow-md', 'opacity-100');
+    
+    // 顯示 Loading 遮罩
+    document.getElementById('col-mask').classList.remove('hidden'); // 暫時遮住欄位
+    document.getElementById('preview-mask').classList.remove('hidden');
+    document.getElementById('column-list').innerHTML = '<div class="p-4 text-center"><div class="loader mx-auto"></div></div>';
+    
+    // 禁用發送按鈕
+    toggleSendButton(false);
+
+    // 2. 呼叫後端
+    google.script.run.withSuccessHandler(res => { 
+      isReportLoading = false;
+      
+      // 解除鎖定
+      allBtns.forEach(b => {
+          b.disabled = false;
+          b.classList.remove('opacity-50', 'cursor-wait');
+      });
+
+      if(res.success) { 
+        // 儲存當前選擇
+        reportRawData.sheetName = sheetName;
+        reportRawData.headers = res.headers; 
+        
+        renderColumnPicker(res.headerRowIndex); 
+      } else {
+        showToast("讀取失敗", res.msg, "error",5000);
+        document.getElementById('preview-mask').classList.add('hidden');
+      }
+    }).getSheetHeaders(appData.currentClass.url, sheetName);
+  }
+  
+  function renderColumnPicker(rowIndex) {
+    const div = document.getElementById('column-list'); 
+    div.innerHTML = "";
+    
+    reportRawData.headers.forEach(h => { 
+      if(!h) return; 
+      // 預設不勾選個資
+      const checked = !['座號','姓名','Email','電子郵件'].includes(h) ? "checked" : ""; 
+      
+      // 漂亮的 Checkbox 樣式
+      div.innerHTML += `
+        <label class="flex items-center p-2 rounded hover:bg-slate-50 cursor-pointer transition-colors border-b border-slate-100 last:border-0">
+            <input type="checkbox" value="${h}" class="col-check w-4 h-4 text-blue-600 rounded focus:ring-blue-500 border-gray-300 mr-3" ${checked} onchange="updateSimplePreview()"> 
+            <span class="text-sm text-slate-700 select-none">${h}</span>
+        </label>`; 
+    });
+
+    document.getElementById('col-mask').classList.add('hidden'); // 移除遮罩
+
+    // 接著讀取數據
+    google.script.run.withSuccessHandler(res => { 
+      document.getElementById('preview-mask').classList.add('hidden');
+      if(res.success) { 
+        reportRawData.full = res.data; 
+        showToast("已載入", `${res.data.length} 筆成績資料`, "success",1000); 
+        updateSimplePreview(); 
+        toggleSendButton(true); // 啟用發送按鈕
+      } 
+    }).fetchSheetDataForEmail(appData.currentClass.url, reportRawData.sheetName, rowIndex);
+  }
+
+  function updateSimplePreview() {
+    // 顯示更新狀態
+    const status = document.getElementById('preview-status');
+    status.classList.remove('hidden');
+
+    reportRawData.selectedCols = Array.from(document.querySelectorAll('.col-check:checked')).map(c=>c.value);
+    
+    const previewBox = document.getElementById('simple-preview');
+    
+    if(reportRawData.full.length === 0) {
+        previewBox.innerHTML = '<div class="text-slate-400 text-center mt-10">無資料</div>';
+        return;
+    }
+
+    const s = reportRawData.full[0]; // 預覽第一筆
+    const cols = reportRawData.selectedCols;
+    
+    // 生成預覽表格 HTML
+    const th = cols.map(c=>`<th class="border border-slate-300 px-3 py-2 bg-slate-50 text-slate-600 font-bold">${c}</th>`).join('');
+    const td = cols.map(c=>`<td class="border border-slate-300 px-3 py-2 text-center text-slate-800">${s[c]||''}</td>`).join('');
+    
+    const html = `
+        <div class="mb-4 text-center">
+            <div class="font-bold text-lg text-blue-700">${s._name || '學生姓名'}</div>
+            <div class="text-xs text-slate-400">預覽視圖 (第一位學生)</div>
+        </div>
+        <table class="w-full border-collapse text-xs shadow-sm">
+            <thead><tr>${th}</tr></thead>
+            <tbody><tr>${td}</tr></tbody>
+        </table>
+        <div class="mt-4 text-xs text-slate-400 text-center border-t pt-2">
+            * 實際信件將包含完整的 CSS 樣式
+        </div>
+    `;
+    
+    previewBox.innerHTML = html;
+    setTimeout(() => status.classList.add('hidden'), 300); // 模擬短暫延遲感
+  }
+
+  function toggleSendButton(enable) {
+      const btn = document.getElementById('btn-prepare-send');
+      if(enable) {
+          btn.disabled = false;
+          btn.classList.remove('bg-slate-300', 'cursor-not-allowed', 'shadow-none');
+          btn.classList.add('bg-blue-600', 'hover:bg-blue-700', 'shadow-lg', 'cursor-pointer');
+      } else {
+          btn.disabled = true;
+          btn.classList.add('bg-slate-300', 'cursor-not-allowed', 'shadow-none');
+          btn.classList.remove('bg-blue-600', 'hover:bg-blue-700', 'shadow-lg', 'cursor-pointer');
+      }
+  }
+
+  function openBatchModal(type) {
+     if(type === 'report') {
+        reportRawData.selectedCols = Array.from(document.querySelectorAll('.col-check:checked')).map(c=>c.value);
+        const targets = reportRawData.full.filter(s => s._email); 
+        if(targets.length === 0) return showToast("錯誤", "沒有可發送的對象 (缺 Email)", "error",5000);
+        
+        // 使用 reportRawData.sheetName 確保拿到正確的分頁名
+        batchData = { type: 'report', sheetName: reportRawData.sheetName, list: targets, currentIndex: 0 }; 
+        openModal();
+     }
+  }
+</script>
