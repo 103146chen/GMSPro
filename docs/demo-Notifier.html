@@ -1,0 +1,1054 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>國文科成績管理系統 v11.2 (Demo 版)</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  
+  <style>
+    /* UI Utilities */
+    ::-webkit-scrollbar { width: 8px; }
+    ::-webkit-scrollbar-track { background: #f1f1f1; }
+    ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
+    
+    .loader { border: 3px solid #f3f3f3; border-top: 3px solid #3b82f6; border-radius: 50%; width: 20px; height: 20px; animation: spin 1s linear infinite; }
+    @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+    
+    .custom-scrollbar::-webkit-scrollbar-thumb { background-color: #94a3b8; }
+    
+    .modal-enter { opacity: 0; transform: scale(0.95); }
+    .modal-enter-active { opacity: 1; transform: scale(1); transition: opacity 0.2s, transform 0.2s; }
+
+    /* Tag Input Styles */
+    .tag-container { display: flex; flex-wrap: wrap; gap: 4px; padding: 4px; border: 1px solid #e2e8f0; border-radius: 6px; background: #fff; min-height: 42px; align-items: center; }
+    .tag-container:focus-within { border-color: #a855f7; box-shadow: 0 0 0 2px rgba(168, 85, 247, 0.2); }
+    .tag-chip { background: #eff6ff; color: #1e40af; padding: 2px 8px; border-radius: 999px; font-size: 12px; font-weight: bold; display: flex; align-items: center; gap: 4px; border: 1px solid #bfdbfe; white-space: nowrap; }
+    .tag-chip button { color: #60a5fa; cursor: pointer; font-size: 14px; line-height: 1; }
+    .tag-chip button:hover { color: #1d4ed8; }
+    .tag-input { border: none; outline: none; flex: 1; min-width: 60px; font-size: 13px; padding: 4px; }
+
+    .text-slate-400 {color:slategray;}
+  </style>
+
+  <script>
+    // 初始化模擬資料
+    if (!sessionStorage.getItem('CLASS_CONFIG_LIST')) sessionStorage.setItem('CLASS_CONFIG_LIST', '[]');
+    if (!sessionStorage.getItem('HOMEROOM_CONFIG_LIST')) sessionStorage.setItem('HOMEROOM_CONFIG_LIST', '[]');
+    if (!sessionStorage.getItem('PENDING_CONFIG_LIST')) sessionStorage.setItem('PENDING_CONFIG_LIST', '[]');
+    if (!sessionStorage.getItem('MOCK_DRIVE')) sessionStorage.setItem('MOCK_DRIVE', JSON.stringify({
+        root: { id: 'root', name: '我的雲端硬碟', type: 'folder', children: [] }
+    }));
+
+    // 模擬 Google Apps Script 環境
+    // 模擬 Google Apps Script 環境 (修復版)
+    // 1. 定義所有後端函式
+    const mockServerFunctions = {
+        initAppData: () => {
+            const subject = JSON.parse(sessionStorage.getItem('CLASS_CONFIG_LIST') || '[]');
+            const homeroom = JSON.parse(sessionStorage.getItem('HOMEROOM_CONFIG_LIST') || '[]');
+            return { subject, homeroom };
+        },
+        apiGetPendingFiles: () => JSON.parse(sessionStorage.getItem('PENDING_CONFIG_LIST') || '[]'),
+        loadUserTemplates: () => ({
+            missingSubject: "【作業補交通知】{{姓名}} - 尚有未完成作業",
+            missingBody: "{{姓名}} 同學好：\n\n系統檢測到您有以下作業尚未登錄成績。\n\n{{缺交列表}}\n\n{{逾期列表}}\n\n請注意期限，盡速補交。",
+            reportSubject: "【成績通知】{{姓名}} - 國文科成績單",
+            reportBody: "親愛的家長您好：\n\n這是 {{姓名}} 的成績通知，詳細分數如下表：\n\n{{成績表格}}\n\n請查收，謝謝。"
+        }),
+        saveUserTemplates: (json) => ({ success: true }),
+        apiGetStorageFolder: () => {
+            const id = sessionStorage.getItem('DEFAULT_FOLDER_ID') || '';
+            const name = id ? "已設定資料夾" : "尚未設定 (預設為根目錄)";
+            return { success: true, id, name };
+        },
+        apiSaveStorageFolder: (id) => {
+            sessionStorage.setItem('DEFAULT_FOLDER_ID', id);
+            return { success: true, folderName: "模擬資料夾 " + id };
+        },
+        apiBrowseDrive: (folderId) => ({ success: true, current: { id: folderId||'root', name: folderId?'Child':'Root' }, children: [] }),
+        apiBatchCreateTemplates: (configs) => {
+            const results = [];
+            const pending = JSON.parse(sessionStorage.getItem('PENDING_CONFIG_LIST') || '[]');
+            // 讀取現有的模擬資料庫，或建立新的
+            let mockDB = JSON.parse(sessionStorage.getItem('MOCK_SHEET_DATA') || '{}');
+
+            configs.forEach(c => {
+                const url = `https://mock-sheet/${encodeURIComponent(c.title)}`;
+                
+                // 1. 解析學生名單 (若無則自動產生 5 位範例)
+                let students = [];
+                if (c.studentsStr && c.studentsStr.trim()) {
+                    students = c.studentsStr.trim().split('\n').map(line => {
+                        const parts = line.split(',');
+                        return { seat: parts[0]?.trim(), name: parts[1]?.trim(), email: parts[2]?.trim() };
+                    }).filter(s => s.seat);
+                } else {
+                    for(let i=1; i<=5; i++) {
+                        students.push({ seat: i.toString().padStart(2,'0'), name: `模擬生${i}號`, email: `student${i}@school.edu.tw` });
+                    }
+                }
+
+                // 2. 自動生成多個成績欄位 (模擬 "習作", "小考" 等)
+                const extraCols = ["習作L1", "習作L2", "第一課默寫", "成語測驗", "作文:回憶"];
+                const headers = ["座號", "姓名", "Email", ...c.sheetsStr.split(',').map(s=>s.trim()), ...extraCols];
+
+                // 3. 生成學生成績資料 (包含隨機缺交)
+                const sheetData = students.map(s => {
+                    let row = { "_seatNo": s.seat, "_name": s.name, "_email": s.email, "座號": s.seat, "姓名": s.name, "Email": s.email };
+                    
+                    // 填入分頁成績 (段考通常不缺交)
+                    // 填入分頁成績與日常作業 (全部都有機率缺交，模擬真實狀況)
+                    const allCols = [...c.sheetsStr.split(',').map(s=>s.trim()), ...extraCols];
+                    
+                    allCols.forEach(col => {
+                        // 20% 機率缺交 (空字串)
+                        if (Math.random() < 0.2) {
+                            row[col] = ""; 
+                        } else {
+                            // 隨機分數 40~100 (讓部分不及格)
+                            row[col] = Math.floor(Math.random() * 60) + 40; 
+                        }
+                    });
+                    return row;
+                });
+
+                // 4. 存入模擬資料庫 (Key 為 URL)
+                mockDB[url] = { headers: headers, data: sheetData };
+
+                results.push({ title: c.title, url: url, success: true });
+                pending.push({ 
+                    name: c.title, url: url, created: new Date().toISOString(), role: 'pending',
+                    taEmail: c.taEmail || "", isPublic: c.permission?.isPublic || false
+                });
+            });
+
+            sessionStorage.setItem('PENDING_CONFIG_LIST', JSON.stringify(pending));
+            sessionStorage.setItem('MOCK_SHEET_DATA', JSON.stringify(mockDB));
+            
+            return { success: true, results: results, log: "模擬建立成功 (含成績資料)" };
+        },
+        createDataHubSheet: (name) => ({ success: true, url: 'https://mock-db-sheet', name }),
+        getSheetList: (url) => (url && url.includes('mock')) ? ["第一次段考", "第二次段考", "平時成績"] : ["Sheet1"],
+        apiSaveAllData: (subject, homeroom, pending) => {
+            sessionStorage.setItem('CLASS_CONFIG_LIST', JSON.stringify(subject));
+            sessionStorage.setItem('HOMEROOM_CONFIG_LIST', JSON.stringify(homeroom));
+            if (pending) sessionStorage.setItem('PENDING_CONFIG_LIST', JSON.stringify(pending));
+            return { success: true };
+        },
+        apiScanAllClassTargets: (url, targets, days, refDateStr) => {
+            // 1. 讀取模擬資料
+            const mockDB = JSON.parse(sessionStorage.getItem('MOCK_SHEET_DATA') || '{}');
+            const sheetData = mockDB[url];
+
+            if (!sheetData || !sheetData.data) {
+                return { success: true, data: [] };
+            }
+
+            const result = [];
+            // 基準日 (使用者輸入的檢查日期)
+            const checkDate = refDateStr ? new Date(refDateStr) : new Date();
+            // 真實今天 (用來產生固定的模擬「作業日期 A」)
+            const realToday = new Date();
+            
+            // B: 設定的寬限天數
+            const graceDays = parseInt(days) || 7;
+
+            sheetData.data.forEach(student => {
+                const warnings = [];
+                const expired = [];
+
+                Object.keys(student).forEach(key => {
+                    if (key.startsWith('_') || ['座號', '姓名', 'Email'].includes(key)) return;
+
+                    // 檢查是否在監控清單中
+                    const isTarget = targets.length === 0 || targets.includes(key);
+
+                    if (isTarget && student[key] === "") {
+                        // 發現缺交
+                        
+                        // --- 模擬邏輯開始 ---
+                        // A: 模擬「作業日期」 (Assign Date)
+                        // 使用 Hash 演算法，根據作業名稱產生一個固定的「天數偏移」
+                        // 讓某些作業是 3 天前派的，某些是 20 天前派的
+                        let hash = 0;
+                        for (let i = 0; i < key.length; i++) hash = ((hash << 5) - hash) + key.charCodeAt(i);
+                        const daysAgo = Math.abs(hash % 20); // 模擬這個作業是在 0~19 天前派的
+                        
+                        const assignDate = new Date(realToday);
+                        assignDate.setDate(realToday.getDate() - daysAgo); // A = 今天 - daysAgo
+
+                        // 計算期限 (A + B)
+                        const deadline = new Date(assignDate);
+                        deadline.setDate(assignDate.getDate() + graceDays);
+
+                        // 計算目前過了幾天 (檢查日 - A)
+                        const diffTime = checkDate - assignDate;
+                        const daysPassed = Math.floor(diffTime / (1000 * 60 * 60 * 24));
+
+                        // --- 判定邏輯 (A + B) ---
+                        // 如果 檢查日 <= A + B (尚未超過期限) -> 寄信提醒
+                        // 如果 檢查日 > A + B (超過期限) -> 逾期
+                        
+                        // 格式化日期字串
+                        const assignStr = assignDate.toLocaleDateString();
+                        const deadlineStr = deadline.toLocaleDateString();
+
+                        if (checkDate <= deadline) {
+                            // 尚未截止 (Warning) - 寄信
+                            const daysLeft = graceDays - daysPassed;
+                            warnings.push({
+                                date: assignStr, // 顯示作業日期
+                                task: key,
+                                status: `剩 ${daysLeft} 天 (期限: ${deadlineStr})`
+                            });
+                        } else {
+                            // 已逾期 (Expired) - 不寄信或歸類為逾期
+                            expired.push({
+                                date: assignStr,
+                                task: key,
+                                status: `已過期 (期限: ${deadlineStr})`
+                            });
+                        }
+                    }
+                });
+
+                if (warnings.length > 0 || expired.length > 0) {
+                    result.push({
+                        seatNo: student._seatNo || student["座號"],
+                        name: student._name || student["姓名"],
+                        email: student._email || student["Email"],
+                        warnings: warnings,
+                        expired: expired
+                    });
+                }
+            });
+
+            return { success: true, data: result };
+        },
+        getSheetHeaders: (url, sheetName) => { const mockDB = JSON.parse(sessionStorage.getItem('MOCK_SHEET_DATA') || '{}'); if (mockDB[url]) { return { success: true, headers: mockDB[url].headers, headerRowIndex: 1 }; } return { success: true, headers: ["座號", "姓名", "Email", "第一次段考", "平時作業1", "平時作業2"], headerRowIndex: 1 }; },
+        fetchSheetDataForEmail: (url, sheetName) => { const mockDB = JSON.parse(sessionStorage.getItem('MOCK_SHEET_DATA') || '{}'); if (mockDB[url]) { return { success: true, data: mockDB[url].data }; } const data = [ { _seatNo: "01", _name: "王小明", _email: "s1@demo.com", "座號": "01", "姓名": "王小明", "第一次段考": 85, "平時作業1": 90, "平時作業2": "缺" }, { _seatNo: "02", _name: "李小華", _email: "s2@demo.com", "座號": "02", "姓名": "李小華", "第一次段考": 92, "平時作業1": 88, "平時作業2": 95 }, ]; return { success: true, data }; },
+        sendEmailDirect: () => ({ success: true }),
+        apiCheckSaltStatus: () => ({ isSet: !!sessionStorage.getItem('SYSTEM_SALT') }),
+        apiSaveSystemSalt: (salt) => { sessionStorage.setItem('SYSTEM_SALT', salt); return { success: true }; },
+        apiGetConfigForCopy: () => ({ success: true, text: "MOCK_DB_CONFIG" }),
+        apiFetchHomeroomMasterData: () => {
+            const data = [];
+            // 模擬產生 30 筆混合資料 (包含不同科目、不同作業、缺交狀況)
+            for(let i=1; i<=30; i++) {
+                const seat = i.toString().padStart(2, '0');
+                const isMissing = Math.random() < 0.2; // 20% 缺交
+                data.push({ 
+                    seatNo: seat, 
+                    name: `模擬生${seat}`, 
+                    subject: "國文", 
+                    sheet: Math.random() > 0.5 ? "第一次段考" : "平時成績", 
+                    task: Math.random() > 0.5 ? "習作分數" : "第1課默寫", 
+                    score: isMissing ? "" : Math.floor(Math.random()*60)+40, // 模擬分數
+                    rank: isMissing ? "-" : Math.floor(Math.random()*15)+1, 
+                    date: new Date().toLocaleDateString()
+                });
+            }
+            // 排序：缺交的排前面
+            data.sort((a,b) => (a.score === "" ? -1 : 1));
+            return { success: true, data };
+        },
+        apiSyncToDatabase: () => ({ success: true, count: 10 }),
+        apiGetHomeroomSyncData: () => {
+            // 讀取導師清單
+            const homeroomList = JSON.parse(sessionStorage.getItem('HOMEROOM_CONFIG_LIST') || '[]');
+            // 為了 Demo 方便，也讀取任課清單 (防止使用者沒設定導師班級導致這裡空白)
+            const subjectList = JSON.parse(sessionStorage.getItem('CLASS_CONFIG_LIST') || '[]');
+            
+            // 合併並去重 (依 URL)
+            const allItems = [...homeroomList, ...subjectList];
+            const uniqueItems = Array.from(new Map(allItems.map(item => [item.url, item])).values());
+
+            if (uniqueItems.length === 0) return [];
+
+            // 回傳格式
+            return uniqueItems.map(c => {
+                // 嘗試從模擬資料庫讀取真實分頁，若無則用預設值
+                let sheets = ["第一次段考", "平時成績"];
+                const mockDB = JSON.parse(sessionStorage.getItem('MOCK_SHEET_DATA') || '{}');
+                if (mockDB[c.url]) {
+                    // 過濾掉 metadata 欄位，只留成績欄位
+                    sheets = mockDB[c.url].headers.filter(h => !['座號','姓名','Email'].includes(h));
+                }
+                
+                return { 
+                    name: c.name, 
+                    url: c.url, 
+                    allSheets: sheets, 
+                    selected: c.targets || [] 
+                };
+            });
+        },
+        apiSaveHomeroomSyncSettings: () => ({ success: true }),
+        // ★★★ 補上缺失的 API ★★★
+        apiGetDbUrl: () => sessionStorage.getItem('DB_URL') || '',
+        apiResetAuthDatabase: () => { sessionStorage.clear(); return { success: true }; },
+        apiArchiveDatabase: () => ({ success: true }),
+        apiSendTestEmail: (email) => ({ success: true })
+    };
+
+    // 2. 構建支援 Chain 調用的 Mock Runner
+    const google = {
+        script: {
+            run: {
+                withSuccessHandler: function(successCallback) {
+                    const proxy = {};
+                    proxy.withFailureHandler = function(failureCallback) { return this; }; // 簡單支援鏈式
+                    Object.keys(mockServerFunctions).forEach(key => {
+                        proxy[key] = function(...args) {
+                            setTimeout(() => {
+                                const result = mockServerFunctions[key](...args);
+                                if (successCallback) successCallback(result);
+                            }, 300);
+                        };
+                    });
+                    return proxy;
+                }
+            }
+        }
+    };
+  </script>
+</head>
+<body class="bg-slate-100 text-slate-800 h-screen flex overflow-hidden font-sans">
+
+  <aside class="w-64 bg-slate-900 text-white flex flex-col shadow-xl z-20 flex-shrink-0 transition-all duration-300">
+    <div class="h-16 flex items-center justify-center border-b border-slate-700 bg-slate-950">
+      <h1 class="text-lg font-bold tracking-wider"><i class="fa-solid fa-feather-pointed mr-2"></i>成績管理 Demo</h1>
+    </div>
+
+    <div class="p-3 pb-0">
+        <div class="bg-slate-800 p-1 rounded-lg flex text-xs font-bold">
+            <button id="mode-btn-subject" onclick="switchMode('subject')" class="flex-1 py-2 rounded text-center transition-all bg-blue-600 text-white shadow-lg">
+                任課老師
+            </button>
+            <button id="mode-btn-homeroom" onclick="switchMode('homeroom')" class="flex-1 py-2 rounded text-center transition-all text-slate-400 hover:text-white">
+                導師
+            </button>
+        </div>
+    </div>
+    
+    <nav class="flex-1 py-4 px-3 space-y-1 overflow-y-auto">
+      <div class="text-xs font-bold text-slate-500 px-3 mb-2 mt-1 uppercase tracking-wider">日常作業</div>
+      <button onclick="switchModeAndDash('subject')" id="nav-dash-subject" class="nav-btn w-full text-left px-4 py-3 rounded-lg flex items-center transition-colors text-slate-400 hover:bg-slate-800 mb-1">
+        <i class="fa-solid fa-chalkboard-user w-6 text-center mr-3"></i>任課儀表板
+      </button>
+      
+      <button onclick="switchModeAndDash('homeroom')" id="nav-dash-homeroom" class="nav-btn w-full text-left px-4 py-3 rounded-lg flex items-center transition-colors text-slate-400 hover:bg-slate-800 mb-1">
+        <i class="fa-solid fa-users w-6 text-center mr-3"></i>導師儀表板
+      </button>
+
+      <div class="text-xs font-bold text-slate-500 px-3 mb-2 mt-6 uppercase tracking-wider">設定管理</div>
+      <button onclick="switchView('templates')" id="nav-templates" class="nav-btn w-full text-left px-4 py-2.5 rounded-lg flex items-center transition-colors text-slate-400 hover:bg-slate-800">
+        <i class="fa-solid fa-file-pen w-6 text-center mr-3"></i>信件模板
+      </button>
+      <button onclick="switchView('link')" id="nav-link" class="nav-btn w-full text-left px-4 py-2.5 rounded-lg flex items-center transition-colors text-slate-400 hover:bg-slate-800">
+        <i class="fa-solid fa-link w-6 text-center mr-3"></i>連結管理中心
+      </button>
+      
+      <button onclick="switchView('creator')" id="nav-creator" class="nav-btn w-full text-left px-4 py-2.5 rounded-lg flex items-center transition-colors text-slate-400 hover:bg-slate-800">
+        <i class="fa-solid fa-folder-plus w-6 text-center mr-3"></i>建立檔案
+      </button>
+
+      <button onclick="switchView('system')" id="nav-system" class="nav-btn w-full text-left px-4 py-2.5 rounded-lg flex items-center transition-colors text-slate-400 hover:bg-slate-800 mt-1">
+        <i class="fa-solid fa-gears w-6 text-center mr-3"></i>系統設定
+      </button>
+    </nav>
+  </aside>
+
+  <main class="flex-1 flex flex-col overflow-hidden relative w-full">
+    <header class="h-16 bg-white shadow-sm flex items-center justify-between px-6 z-10 flex-shrink-0">
+      <h2 id="pageTitle" class="text-xl font-bold text-slate-700">工作儀表板</h2>
+      <div class="text-sm text-slate-400 italic">v11.2 Demo Mode</div>
+    </header>
+
+    <div class="flex-1 overflow-auto p-4 md:p-8 relative">
+      <div id="toast" class="fixed top-20 right-8 bg-white border-l-4 shadow-lg rounded-md px-6 py-4 hidden transition-all duration-300 z-50 max-w-sm transform translate-x-full">
+        <div class="font-bold text-slate-800" id="toastTitle"></div>
+        <div class="text-sm text-slate-600 mt-1" id="toastMsg"></div>
+      </div>
+
+      <div id="view-dashboard" class="view-section space-y-6">
+        <div id="dash-picker" class="max-w-6xl mx-auto">
+           <div class="text-center mb-8 mt-4">
+              <h3 class="text-2xl font-bold text-slate-700 mb-2" id="picker-title">請選擇要管理的項目</h3>
+              <p class="text-slate-500" id="picker-desc">點擊卡片進入管理介面</p>
+           </div>
+           
+           <div id="dash-class-grid" class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
+           </div>
+           
+           <div id="dash-no-data" class="hidden text-center py-12 bg-white rounded-xl border border-dashed border-slate-300">
+              <i class="fa-solid fa-folder-open text-4xl text-slate-300 mb-4"></i>
+              <p class="text-slate-500 mb-4">尚未設定任何連結</p>
+              <button onclick="switchView('creator')" class="text-blue-600 font-bold hover:underline">建立新檔案</button>
+           </div>
+        </div>
+
+        <div id="dash-content" class="hidden flex flex-col items-center animate-[fadeIn_0.3s_ease-out]">
+          <div class="w-full max-w-6xl flex justify-between items-center mb-6">
+              <button onclick="showDashboardPicker()" class="text-slate-500 hover:text-blue-600 font-bold flex items-center transition-colors px-3 py-2 rounded hover:bg-slate-100">
+                 <i class="fa-solid fa-arrow-left mr-2"></i> 返回列表
+              </button>
+              <h2 class="text-2xl font-bold text-slate-800 flex items-center">
+                  <span class="bg-blue-100 text-blue-600 text-sm px-2 py-1 rounded mr-3 align-middle" id="dash-badge-class">Class</span>
+                  <span id="dash-title-class"></span>
+              </h2>
+              <div class="w-24"></div> 
+          </div>
+
+          <div class="w-full max-w-6xl bg-white rounded-t-xl border-b border-slate-200 flex mb-0 shadow-sm">
+              <button onclick="switchDashTab('missing')" id="tab-btn-missing" class="flex-1 py-4 text-center font-bold text-amber-600 border-b-4 border-amber-500 bg-amber-50 transition-all">
+                  <i class="fa-solid fa-magnifying-glass-chart mr-2"></i> 作業缺交監控
+              </button>
+              <button onclick="switchDashTab('report')" id="tab-btn-report" class="flex-1 py-4 text-center font-bold text-slate-400 border-b-2 border-transparent hover:text-blue-500 transition-all">
+                  <i class="fa-solid fa-envelope-open-text mr-2"></i> 成績通知單
+              </button>
+          </div>
+
+          <div id="dash-tab-missing" class="w-full max-w-6xl bg-white rounded-b-xl shadow-sm border border-t-0 border-slate-200 p-8">
+               <div class="grid grid-cols-1 md:grid-cols-2 gap-8 mb-8">
+                   <div class="bg-amber-50 text-amber-800 p-6 rounded-lg border border-amber-100">
+                     <h4 class="font-bold mb-2 flex items-center"><i class="fa-solid fa-circle-info mr-2"></i>監控狀態</h4>
+                     <p class="text-sm mb-1"><span class="text-slate-400">正在監控分頁：</span></p>
+                     <p id="dash-targets" class="font-mono font-bold text-lg mb-3 break-words">--</p>
+                     <p class="text-sm"><span class="text-slate-400">寬限天數：</span> <span class="font-bold" id="dash-days">--</span> 天</p>
+                   </div>
+                   <div class="flex flex-col justify-center items-start space-y-4">
+                       <p class="text-slate-500 text-sm">系統將掃描此科目設定的所有分頁，並可發送缺交提醒。</p>
+                       <button onclick="scanMissing()" id="btn-scan" class="w-full bg-amber-500 hover:bg-amber-600 text-white font-bold px-6 py-4 rounded-lg shadow-lg transition-transform active:scale-95 flex items-center justify-center text-lg">
+                         <i class="fa-solid fa-rocket mr-2"></i> 立即掃描並預覽
+                       </button>
+                   </div>
+               </div>
+          </div>
+
+          <div id="dash-tab-report" class="w-full max-w-6xl bg-white rounded-b-xl shadow-sm border border-t-0 border-slate-200 p-6 hidden">
+               <div class="grid grid-cols-1 lg:grid-cols-12 gap-6 h-[650px]">
+                  <div class="lg:col-span-2 flex flex-col border-r border-slate-200 pr-4">
+                      <h3 class="font-bold text-slate-700 mb-3 flex items-center"><i class="fa-solid fa-table-list mr-2 text-blue-500"></i> 成績分頁</h3>
+                      <div id="rpt-sheet-list" class="flex-1 overflow-y-auto space-y-2 custom-scrollbar pr-2"><div class="text-xs text-slate-400 text-center mt-10">載入中...</div></div>
+                      <button onclick="loadReportTab()" class="mt-3 text-xs text-blue-500 hover:text-blue-700 flex items-center justify-center py-2 border border-dashed border-blue-200 rounded hover:bg-blue-50 w-full transition-colors"><i class="fa-solid fa-rotate mr-1"></i> 重新讀取列表</button>
+                  </div>
+                  <div class="lg:col-span-3 flex flex-col border-r border-slate-200 px-4 relative">
+                      <h3 class="font-bold text-slate-700 mb-3 flex items-center"><i class="fa-solid fa-check-double mr-2 text-purple-500"></i> 顯示欄位</h3>
+                      <div id="col-mask" class="absolute inset-0 bg-white/80 z-10 flex flex-col items-center justify-center text-slate-400 text-sm backdrop-blur-[1px]"><i class="fa-solid fa-arrow-left text-2xl mb-2 animate-bounce"></i>請先選擇左側分頁</div>
+                      <div id="column-list" class="flex-1 overflow-y-auto space-y-1 custom-scrollbar pb-4"></div>
+                  </div>
+                  <div class="lg:col-span-7 flex flex-col pl-2 relative">
+                      <div class="flex justify-between items-center mb-3">
+                          <h3 class="font-bold text-slate-700 flex items-center"><i class="fa-solid fa-eye mr-2 text-green-500"></i> 信件預覽</h3>
+                          <div id="preview-status" class="text-xs font-bold text-amber-500 hidden"><i class="fa-solid fa-circle-notch fa-spin mr-1"></i> 更新中...</div>
+                      </div>
+                      <div class="flex-1 bg-slate-100 border border-slate-200 rounded-lg p-6 overflow-auto mb-4 relative shadow-inner custom-scrollbar flex flex-col items-center">
+                           <div id="simple-preview" class="bg-white shadow-md w-full max-w-xl p-8 text-sm origin-top transition-all min-h-[300px]"><div class="text-slate-300 text-center mt-20">預覽內容將顯示於此</div></div>
+                           <div id="preview-mask" class="absolute inset-0 bg-slate-100/50 z-10 hidden flex items-center justify-center"><div class="loader"></div></div>
+                      </div>
+                      <button onclick="openBatchModal('report')" id="btn-prepare-send" disabled class="w-full py-4 bg-slate-300 text-white rounded-lg font-bold shadow-none transition-all cursor-not-allowed flex items-center justify-center"><i class="fa-solid fa-paper-plane mr-2"></i> 準備發送成績單</button>
+                  </div>
+               </div>
+          </div>
+        </div>
+
+        <div id="dash-content-master" class="hidden flex flex-col items-center animate-[fadeIn_0.3s_ease-out]">
+            <div class="w-full max-w-6xl flex justify-between items-center mb-6">
+                <div class="flex gap-3">
+                    <button onclick="showDashboardPicker()" class="text-slate-500 hover:text-blue-600 font-bold flex items-center transition-colors px-3 py-2 rounded hover:bg-slate-100">
+                       <i class="fa-solid fa-arrow-left mr-2"></i> 返回總覽
+                    </button>
+                    <button onclick="openDbConfigModal()" class="bg-slate-800 text-white hover:bg-slate-900 font-bold px-4 py-2 rounded-lg shadow-md transition-all flex items-center gap-2">
+                       <i class="fa-solid fa-cloud-arrow-up"></i> 發布/同步
+                    </button>
+                </div>
+                
+                <h2 class="text-2xl font-bold text-slate-800 flex items-center">
+                    <span class="bg-pink-100 text-pink-600 text-sm px-2 py-1 rounded mr-3 align-middle">Homeroom</span>
+                    全班成績總覽
+                </h2>
+                
+                <button onclick="syncMasterData()" class="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2 rounded-lg font-bold shadow-lg transition-all active:scale-95 flex items-center">
+                    <i class="fa-solid fa-rotate mr-2"></i> 同步最新成績
+                </button>
+            </div>
+        
+            <div class="w-full max-w-6xl bg-white rounded-xl shadow-sm border border-slate-200 flex flex-col h-[75vh] overflow-hidden">
+                <div class="bg-slate-50 p-4 border-b border-slate-200 flex flex-wrap gap-4 items-center" id="master-filters">
+                    <div class="flex items-center">
+                        <label class="text-xs font-bold text-slate-500 mr-2"><i class="fa-solid fa-user"></i></label>
+                        <select id="filter-student" onchange="applyMasterFilters()" class="border border-slate-300 rounded px-2 py-1.5 text-sm outline-none focus:border-blue-500 bg-white w-28">
+                            <option value="all">全部學生</option>
+                        </select>
+                    </div>
+                    <div class="flex items-center">
+                        <button onclick="openFilterModal()" class="bg-white border border-slate-300 hover:bg-blue-50 text-slate-700 px-3 py-1.5 rounded text-sm font-bold flex items-center transition-colors">
+                            <i class="fa-solid fa-filter mr-2 text-slate-400"></i>
+                            <span id="filter-btn-text">全部分頁</span>
+                        </button>
+                    </div>
+                    <div class="flex items-center flex-1 relative">
+                        <i class="fa-solid fa-magnifying-glass absolute left-3 text-slate-400"></i>
+                        <input id="filter-keyword" oninput="applyMasterFilters()" placeholder="搜尋作業名稱..." class="pl-9 border border-slate-300 rounded px-2 py-1.5 text-sm outline-none focus:border-blue-500 bg-white w-full">
+                    </div>
+                    <div class="text-right text-xs text-slate-400 min-w-[80px]" id="master-status">--</div>
+                </div>
+        
+                <div class="flex-1 overflow-auto bg-slate-100 relative custom-scrollbar">
+                    <div id="master-loading" class="hidden absolute inset-0 bg-white/80 z-10 flex flex-col items-center justify-center backdrop-blur-sm">
+                        <div class="loader mb-4 w-10 h-10 border-4 border-blue-200 border-t-blue-600"></div>
+                        <p class="text-slate-600 font-bold animate-pulse">正在模擬抓取資料...</p>
+                    </div>
+                    <div id="master-empty" class="absolute inset-0 flex flex-col items-center justify-center text-slate-400">
+                        <i class="fa-solid fa-cloud-arrow-down text-6xl mb-4 text-slate-300"></i>
+                        <p class="text-lg font-bold mb-1">準備就緒</p>
+                        <p class="text-sm">請點擊右上角「同步最新成績」按鈕</p>
+                    </div>
+                    <table class="w-full text-sm text-left border-collapse">
+                       <thead class="bg-slate-800 text-white sticky top-0 shadow-md z-0">
+                          <tr>
+                              <th class="p-3 w-16 text-center">座號</th>
+                              <th class="p-3 w-28">姓名</th>
+                              <th class="p-3 w-40">科目</th>
+                              <th class="p-3 w-24 text-center">日期</th>
+                              <th class="p-3 w-40">分頁來源</th>
+                              <th class="p-3">作業名稱</th>
+                              <th class="p-3 w-20 text-center">分數</th>
+                              <th class="p-3 w-20 text-center">排名</th>
+                          </tr>
+                       </thead>
+                       <tbody id="master-tbody" class="bg-white divide-y divide-slate-100 text-slate-700"></tbody>
+                    </table>
+                </div>
+                <div class="bg-white p-3 border-t border-slate-200 text-xs text-slate-500 flex justify-between">
+                    <span>顯示筆數：<span id="count-display" class="font-bold">0</span></span>
+                    <span>不及格筆數：<span id="count-fail" class="font-bold text-red-500">0</span></span>
+                </div>
+            </div>
+        </div>
+      </div>
+
+      <div id="view-creator" class="view-section hidden w-full h-full flex flex-col">
+        <div id="creator-header-section" class="flex-shrink-0 space-y-6 pb-6">
+            <div class="flex items-center justify-between px-1">
+                 <h3 class="font-bold text-slate-700 text-2xl">
+                     <i class="fa-solid fa-wand-magic-sparkles mr-2 text-indigo-500"></i>檔案建立中心
+                 </h3>
+            </div>
+            <div onclick="changeDefaultFolder()" class="bg-white p-4 rounded-xl shadow-sm border border-slate-200 flex flex-col md:flex-row items-center justify-between gap-4 relative z-10 cursor-pointer hover:border-blue-400 transition-colors group">
+                <div class="flex items-center gap-4 w-full md:w-auto">
+                    <div class="w-10 h-10 bg-amber-100 text-amber-600 rounded-lg flex items-center justify-center text-xl flex-shrink-0">
+                        <i class="fa-solid fa-folder-open"></i>
+                    </div>
+                    <div class="min-w-0">
+                        <h4 class="font-bold text-slate-700 text-sm">預設存檔資料夾</h4>
+                        <div class="flex items-center gap-2 mt-1">
+                            <span class="text-xs text-slate-400 flex-shrink-0">目前位置：</span>
+                            <span id="current-folder-display" class="text-xs font-mono font-bold text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded truncate">尚未設定 (預設為根目錄)</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div id="creator-menu" class="grid grid-cols-1 md:grid-cols-3 gap-6 animate-fade-in content-start">
+            <div onclick="openCreatorTool('single')" class="bg-white p-6 rounded-xl shadow-sm border border-slate-200 hover:shadow-lg hover:border-blue-300 transition-all cursor-pointer group flex flex-col items-center justify-center text-center h-64 relative overflow-hidden">
+                <div class="absolute inset-0 bg-blue-50 opacity-0 group-hover:opacity-50 transition-opacity"></div>
+                <div class="relative z-10 flex flex-col items-center">
+                    <div class="w-16 h-16 bg-blue-100 text-blue-600 rounded-2xl flex items-center justify-center text-3xl mb-4 group-hover:scale-110 transition-transform shadow-sm"><i class="fa-solid fa-file-invoice"></i></div>
+                    <h4 class="text-xl font-bold text-slate-700 mb-2">成績單範本</h4>
+                    <p class="text-sm text-slate-500 px-4 leading-relaxed">建立單一班級標準成績單。</p>
+                </div>
+            </div>
+            <div onclick="openCreatorTool('batch')" class="bg-white p-6 rounded-xl shadow-sm border border-slate-200 hover:shadow-lg hover:border-indigo-300 transition-all cursor-pointer group flex flex-col items-center justify-center text-center h-64 relative overflow-hidden ring-1 ring-indigo-50">
+                <div class="absolute top-0 right-0 bg-indigo-500 text-white text-[10px] px-3 py-1 rounded-bl-lg font-bold z-20 shadow-sm">HOT</div>
+                <div class="absolute inset-0 bg-indigo-50 opacity-0 group-hover:opacity-50 transition-opacity"></div>
+                <div class="relative z-10 flex flex-col items-center">
+                    <div class="w-16 h-16 bg-indigo-100 text-indigo-600 rounded-2xl flex items-center justify-center text-3xl mb-4 group-hover:scale-110 transition-transform shadow-sm"><i class="fa-solid fa-industry"></i></div>
+                    <h4 class="text-xl font-bold text-slate-700 mb-2">批次建立工廠</h4>
+                    <p class="text-sm text-slate-500 px-4 leading-relaxed">批量輸入名單，一次生成多個檔案。</p>
+                </div>
+            </div>
+            <div onclick="openCreatorTool('db')" class="bg-white p-6 rounded-xl shadow-sm border border-slate-200 hover:shadow-lg hover:border-emerald-300 transition-all cursor-pointer group flex flex-col items-center justify-center text-center h-64 relative overflow-hidden">
+                <div class="absolute inset-0 bg-emerald-50 opacity-0 group-hover:opacity-50 transition-opacity"></div>
+                <div class="relative z-10 flex flex-col items-center">
+                    <div class="w-16 h-16 bg-emerald-100 text-emerald-600 rounded-2xl flex items-center justify-center text-3xl mb-4 group-hover:scale-110 transition-transform shadow-sm"><i class="fa-solid fa-database"></i></div>
+                    <h4 class="text-xl font-bold text-slate-700 mb-2">資料中繼站</h4>
+                    <p class="text-sm text-slate-500 px-4 leading-relaxed">建立查詢端專用資料庫。</p>
+                </div>
+            </div>
+        </div>
+
+        <div id="creator-workspace" class="hidden flex-1 flex flex-col bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden animate-fade-in relative">
+            <div class="border-b border-slate-100 p-4 flex items-center justify-between bg-slate-50 flex-shrink-0 h-16">
+                <div class="flex items-center gap-4">
+                    <button onclick="backToCreatorMenu()" class="text-slate-500 hover:text-slate-800 hover:bg-white border border-transparent hover:border-slate-200 px-3 py-1.5 rounded-lg transition-all text-sm font-bold flex items-center shadow-sm">
+                        <i class="fa-solid fa-arrow-left mr-2"></i>返回選單
+                    </button>
+                    <div class="h-6 w-px bg-slate-300"></div>
+                    <h4 id="workspace-title" class="font-bold text-slate-700 text-lg flex items-center gap-2"></h4>
+                </div>
+                <div id="batch-toolbar" class="hidden gap-2">
+                    <button onclick="addBatchRow()" class="bg-white border border-slate-300 text-slate-600 hover:bg-slate-50 px-3 py-1.5 rounded-lg text-sm font-bold transition-all shadow-sm">
+                        <i class="fa-solid fa-plus mr-1"></i> 新增列
+                    </button>
+                    <button onclick="runBatchCreate()" id="btn-run-batch-top" class="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-1.5 rounded-lg text-sm font-bold transition-all shadow-sm">
+                        <i class="fa-solid fa-play mr-1"></i> 開始生成
+                    </button>
+                </div>
+            </div>
+
+            <div class="flex-1 relative overflow-hidden flex flex-col">
+                <div id="tool-single" class="creator-tool-panel hidden w-full h-full overflow-y-auto p-8">
+                    <div class="max-w-2xl mx-auto bg-slate-50 border border-slate-200 rounded-xl p-8 shadow-sm">
+                        <h5 class="font-bold text-slate-700 mb-6 text-lg border-b border-slate-200 pb-2">基本設定</h5>
+                        <div class="space-y-6">
+                            <div>
+                                <label class="block text-sm font-bold text-slate-600 mb-2">檔案名稱</label>
+                                <input type="text" id="inp-single-title" class="w-full bg-white border border-slate-300 rounded-lg px-4 py-3 focus:ring-2 focus:ring-blue-500 outline-none" placeholder="例如：國文成績_801">
+                            </div>
+                            <div>
+                                <label class="block text-sm font-bold text-slate-600 mb-2">分頁設定 (用逗號分隔)</label>
+                                <input type="text" id="inp-single-sheets" class="w-full bg-white border border-slate-300 rounded-lg px-4 py-3 focus:ring-2 focus:ring-blue-500 outline-none" value="第一次段考, 第二次段考, 平時成績">
+                            </div>
+                            <div><label class="block text-sm font-bold text-slate-600 mb-2">小老師 Email (協作權限)</label><input type="text" id="inp-single-ta" class="w-full bg-white border border-slate-300 rounded-lg px-4 py-3 outline-none" placeholder="ta@school.edu.tw"></div>
+                            <div><label class="block text-sm font-bold text-slate-600 mb-2">學生名單 (座號,姓名,Email)</label><textarea id="inp-single-students" class="w-full bg-white border border-slate-300 rounded-lg px-4 py-3 outline-none h-24 font-mono text-xs" placeholder="01,王小明,s1@mail.com&#10;02,李小華,s2@mail.com"></textarea></div>
+                            <div class="flex items-center justify-between bg-white p-3 rounded border border-slate-200">
+                                <span class="text-sm font-bold text-slate-700">開放學生公開檢視成績？</span>
+                                <input type="checkbox" id="chk-single-public" class="w-5 h-5 text-blue-600 rounded">
+                            </div>
+                            <div class="pt-4 flex gap-3">
+                                <button onclick="resetSingleForm()" class="px-4 py-3 border border-slate-300 rounded-lg text-slate-500 font-bold hover:bg-slate-100">重置</button>
+                                <button onclick="runSingleCreate()" id="btn-create-single" class="flex-1 bg-blue-600 hover:bg-blue-700 text-white py-3 rounded-lg font-bold text-base shadow-md transition-all">
+                                    <i class="fa-solid fa-plus mr-2"></i>立即建立檔案
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="tool-batch" class="creator-tool-panel hidden w-full h-full flex flex-col">
+                    <div class="flex-1 overflow-auto bg-slate-50/50 p-6">
+                        <div class="mb-4 bg-white p-4 rounded-lg border border-indigo-100 shadow-sm">
+                            <div class="text-xs text-slate-500 mb-2">輸入批次建立的檔案清單：</div>
+                        </div>
+                        <table class="w-full border-collapse text-sm bg-white shadow-sm rounded-lg overflow-hidden">
+                            <thead>
+                                <tr class="bg-slate-100 text-slate-600 font-bold border-b border-slate-200">
+                                    <th class="text-left py-3 px-4 w-12">#</th>
+                                    <th class="text-left py-3 px-2 w-28">檔案名稱</th>
+                                    <th class="text-left py-3 px-2 w-32">學生名單 (預設自動)</th>
+                                    <th class="text-left py-3 px-2 w-28">分頁設定</th>
+                                    <th class="text-left py-3 px-2 w-24">小老師 Email</th>
+                                    <th class="text-center py-3 px-2 w-12">公開</th>
+                                    <th class="text-center py-3 px-2 w-12"><i class="fa-solid fa-trash"></i></th>
+                                </tr>
+                            </thead>
+                            <tbody id="batch-table-body" class="divide-y divide-slate-100"></tbody>
+                        </table>
+                    </div>
+                    <div id="batch-log-container" class="hidden h-40 bg-slate-900 text-green-400 font-mono text-xs p-4 overflow-y-auto border-t border-slate-700 flex-shrink-0"></div>
+                </div>
+
+                <div id="tool-db" class="creator-tool-panel hidden w-full h-full flex flex-col items-center justify-center p-8 bg-slate-50/30 overflow-y-auto">
+                    <div class="max-w-2xl w-full bg-white p-10 rounded-2xl shadow-lg border border-slate-200 text-center relative">
+                        <div class="absolute top-0 left-0 w-full h-2 bg-gradient-to-r from-emerald-400 to-teal-500"></div>
+                        <div class="w-24 h-24 bg-emerald-50 text-emerald-500 rounded-full flex items-center justify-center text-4xl mx-auto mb-6"><i class="fa-solid fa-database"></i></div>
+                        <h3 class="text-2xl font-bold text-slate-800 mb-3">建立查詢端資料庫</h3>
+                        <p class="text-slate-500 mb-8 leading-relaxed">建立包含 <code>DB_Source</code> 與 <code>DB_Auth</code> 的核心資料庫。</p>
+                        <div class="flex justify-center mb-8 relative">
+                            <input type="text" id="inp-db-name" value="GradeFlow_Database" class="w-full max-w-md text-center bg-slate-50 border border-slate-300 rounded-xl px-6 py-4 focus:ring-2 focus:ring-emerald-500 outline-none font-bold text-slate-700 text-lg">
+                        </div>
+                        <button onclick="createDatabase()" id="btn-create-db" class="w-full max-w-md bg-emerald-600 hover:bg-emerald-700 text-white px-10 py-3 rounded-xl font-bold text-lg shadow-md transition-all">立即建立</button>
+                        <div id="db-result-link" class="mt-8 hidden p-5 bg-emerald-50 border border-emerald-200 rounded-xl text-emerald-800 text-left"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+      </div>
+
+      <div id="view-templates" class="view-section hidden max-w-5xl mx-auto space-y-6">
+        <div class="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
+           <div class="flex justify-between items-center mb-6">
+             <h3 class="font-bold text-lg text-slate-700 border-l-4 border-pink-500 pl-3">信件模板設定</h3>
+             <button onclick="saveTemplates()" class="bg-pink-600 hover:bg-pink-700 text-white px-4 py-2 rounded font-bold text-sm"><i class="fa-solid fa-save mr-1"></i> 儲存設定</button>
+           </div>
+           <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
+             <div class="space-y-3">
+               <h4 class="font-bold text-amber-600"><i class="fa-solid fa-triangle-exclamation mr-1"></i>缺交通知信</h4>
+               <input id="tpl-missing-sub" class="w-full border rounded p-2 text-sm font-bold focus:ring-2 focus:ring-amber-500 outline-none" placeholder="信件主旨">
+               <textarea id="tpl-missing-body" class="w-full h-96 border rounded p-2 text-sm focus:ring-2 focus:ring-amber-500 outline-none custom-scrollbar" placeholder="信件內文..."></textarea>
+             </div>
+             <div class="space-y-3">
+               <h4 class="font-bold text-blue-600"><i class="fa-solid fa-envelope-open-text mr-1"></i>成績通知信</h4>
+               <input id="tpl-report-sub" class="w-full border rounded p-2 text-sm font-bold focus:ring-2 focus:ring-blue-500 outline-none" placeholder="信件主旨">
+               <textarea id="tpl-report-body" class="w-full h-96 border rounded p-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none custom-scrollbar" placeholder="信件內文..."></textarea>
+             </div>
+           </div>
+        </div>
+      </div>
+
+      <div id="view-link" class="view-section hidden max-w-7xl mx-auto space-y-8 pb-20">
+         <div class="flex flex-col md:flex-row justify-between items-end md:items-center gap-4 bg-white p-6 rounded-2xl shadow-sm border border-slate-100">
+            <div>
+               <h3 class="font-bold text-slate-800 text-2xl tracking-tight"><i class="fa-solid fa-link text-indigo-500 mr-3"></i>連結管理中心</h3>
+               <p class="text-slate-500 text-sm mt-1">集中管理所有成績連結，支援多重身分指派。</p>
+            </div>
+            <div class="flex gap-3 w-full md:w-auto">
+               <button onclick="openManualLinkModal()" class="flex-1 md:flex-none text-sm bg-white hover:bg-slate-50 text-slate-600 hover:text-indigo-600 px-5 py-2.5 rounded-xl font-bold border border-slate-200 hover:border-indigo-200 transition-all shadow-sm flex items-center justify-center group">
+                  <div class="w-6 h-6 rounded-full bg-slate-100 group-hover:bg-indigo-100 text-slate-400 group-hover:text-indigo-600 flex items-center justify-center mr-2 transition-colors">
+                      <i class="fa-solid fa-plus text-xs"></i>
+                  </div>
+                  新增連結
+               </button>
+               <button onclick="openBatchConfigModal()" class="flex-1 md:flex-none text-sm bg-indigo-600 hover:bg-indigo-700 text-white px-5 py-2.5 rounded-xl font-bold shadow-indigo-200 shadow-lg hover:shadow-xl transition-all flex items-center justify-center active:scale-95">
+                  <i class="fa-solid fa-list-check mr-2"></i> 批次管理
+               </button>
+            </div>
+         </div>
+
+         <div id="area-pending" class="hidden animate-fade-in">
+            <div class="flex items-center gap-3 mb-4 pl-1">
+               <span class="bg-amber-100 text-amber-700 px-3 py-1 rounded-full text-xs font-bold shadow-sm border border-amber-200 animate-pulse">
+                  <i class="fa-solid fa-bell mr-1"></i>待處理
+               </span>
+               <div class="h-px bg-slate-200 flex-1"></div>
+            </div>
+            <div id="pending-list" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5"></div>
+         </div>
+
+         <div id="area-subject" class="animate-fade-in">
+            <div class="flex items-center gap-3 mb-4 pl-1">
+               <div class="flex items-center gap-2">
+                  <div class="w-8 h-8 rounded-lg bg-blue-100 text-blue-600 flex items-center justify-center"><i class="fa-solid fa-chalkboard-user"></i></div>
+                  <h4 class="font-bold text-slate-700 text-lg">任課班級</h4>
+               </div>
+               <span class="text-xs bg-slate-100 text-slate-500 px-2 py-0.5 rounded">寄發缺交通知</span>
+               <div class="h-px bg-slate-200 flex-1"></div>
+            </div>
+            <div id="subject-list" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5 mb-10"></div>
+            <div id="subject-empty" class="hidden flex flex-col items-center justify-center py-12 bg-slate-50 rounded-2xl border-2 border-dashed border-slate-200">
+                <p class="text-slate-400 font-bold text-sm">目前沒有任課連結</p>
+            </div>
+         </div>
+
+         <div id="area-homeroom" class="animate-fade-in">
+            <div class="flex items-center gap-3 mb-4 pl-1">
+               <div class="flex items-center gap-2">
+                  <div class="w-8 h-8 rounded-lg bg-purple-100 text-purple-600 flex items-center justify-center"><i class="fa-solid fa-users"></i></div>
+                  <h4 class="font-bold text-slate-700 text-lg">導師科目</h4>
+               </div>
+               <span class="text-xs bg-slate-100 text-slate-500 px-2 py-0.5 rounded">全班成績彙整</span>
+               <div class="h-px bg-slate-200 flex-1"></div>
+            </div>
+            <div id="homeroom-list" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5"></div>
+            <div id="homeroom-empty" class="hidden flex flex-col items-center justify-center py-12 bg-slate-50 rounded-2xl border-2 border-dashed border-slate-200">
+                <p class="text-slate-400 font-bold text-sm">目前沒有導師連結</p>
+            </div>
+         </div>
+      </div>
+
+      <div id="view-system" class="view-section hidden max-w-7xl mx-auto space-y-6 pb-20">
+          <div class="bg-white p-4 rounded-xl shadow-sm border border-slate-200 flex items-center justify-between">
+               <div>
+                   <h3 class="font-bold text-slate-700 text-lg"><i class="fa-solid fa-gears mr-2"></i>系統設定</h3>
+                   <p class="text-xs text-slate-400">管理全域變數、資安金鑰與系統偏好設定。</p>
+               </div>
+               <div class="text-xs font-mono text-slate-300">v11.2 System Config</div>
+          </div>
+          <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 animate-fade-in">
+              <div class="bg-white rounded-xl shadow-sm border border-slate-200 p-6 flex flex-col h-full">
+                  <div class="flex items-center gap-4 mb-4 border-b border-slate-100 pb-3">
+                      <div class="w-10 h-10 rounded-lg bg-gradient-to-br from-indigo-500 to-purple-600 text-white flex items-center justify-center text-xl shadow-md">
+                          <i class="fa-solid fa-shield-halved"></i>
+                      </div>
+                      <div>
+                          <h3 class="font-bold text-slate-800 text-lg">系統金鑰 (Salt)</h3>
+                          <p class="text-xs text-slate-500">加密核心，修改後需同步更新查詢端。</p>
+                      </div>
+                  </div>
+                  <div class="space-y-4">
+                      <div id="salt-status-msg" class="text-xs font-bold text-slate-400">檢查中...</div>
+                      <input type="text" id="inp-sys-salt" class="w-full border border-slate-300 rounded p-2 text-sm" placeholder="請輸入加密金鑰...">
+                      <button onclick="saveSystemSalt()" id="btn-save-salt" class="w-full bg-indigo-600 text-white font-bold py-2 px-4 rounded-lg text-sm">儲存設定</button>
+                  </div>
+              </div>
+
+              <div class="bg-white rounded-xl shadow-sm border border-slate-200 p-6 flex flex-col">
+                  <div class="flex items-center gap-4 mb-4 border-b border-slate-100 pb-3">
+                      <div class="w-10 h-10 rounded-lg bg-red-500 text-white flex items-center justify-center text-xl"><i class="fa-solid fa-triangle-exclamation"></i></div>
+                      <h3 class="font-bold text-slate-800 text-lg">危險操作區</h3>
+                  </div>
+                  <div class="space-y-3">
+                      <button onclick="doArchive()" id="btn-archive" class="w-full border border-slate-300 text-slate-600 hover:bg-slate-50 font-bold py-2 rounded-lg text-sm"><i class="fa-solid fa-box-archive mr-2"></i>封存目前資料庫</button>
+                      <button onclick="doResetAuth()" class="w-full border border-red-200 text-red-600 hover:bg-red-50 font-bold py-2 rounded-lg text-sm"><i class="fa-solid fa-rotate-left mr-2"></i>重置/清空本機資料</button>
+                  </div>
+              </div>
+
+              <div class="bg-white rounded-xl shadow-sm border border-slate-200 p-6 flex flex-col">
+                   <div class="flex items-center gap-4 mb-4 border-b border-slate-100 pb-3">
+                      <div class="w-10 h-10 rounded-lg bg-green-500 text-white flex items-center justify-center text-xl"><i class="fa-solid fa-envelope"></i></div>
+                      <h3 class="font-bold text-slate-800 text-lg">測試發信</h3>
+                  </div>
+                  <div class="space-y-3">
+                      <input id="inp-test-email" class="w-full border rounded p-2 text-sm" placeholder="輸入接收測試信的 Email">
+                      <button onclick="sendTestEmail()" id="btn-test-mail" class="w-full bg-green-600 text-white font-bold py-2 rounded-lg text-sm">發送測試信</button>
+                  </div>
+              </div>
+          </div>
+      </div>
+
+    </div>
+
+    <div id="batch-config-modal" class="fixed inset-0 bg-slate-900/50 z-50 hidden flex items-center justify-center p-4 backdrop-blur-sm">
+      <div class="bg-white rounded-xl shadow-2xl w-full max-w-7xl h-[90vh] flex flex-col overflow-hidden animate-[modal-enter_0.3s_ease-out]">
+        <div class="bg-slate-800 text-white px-6 py-4 flex justify-between items-center flex-shrink-0">
+          <div><h3 class="text-xl font-bold"><i class="fa-solid fa-list-check mr-2"></i>連結項目批次設定</h3></div>
+          <button onclick="document.getElementById('batch-config-modal').classList.add('hidden')" class="text-slate-400 hover:text-white"><i class="fa-solid fa-xmark text-2xl"></i></button>
+        </div>
+        <div class="flex-1 overflow-auto custom-scrollbar p-6 bg-slate-100">
+          <div class="bg-white rounded-lg shadow overflow-hidden">
+            <table class="w-full text-sm text-left">
+              <thead class="bg-slate-50 text-slate-600 font-bold border-b sticky top-0 z-10 shadow-sm">
+                <tr><th class="p-3 w-10">#</th><th class="p-3 w-32">目前狀態</th><th class="p-3 w-40">連結身分</th><th class="p-3 w-40">顯示名稱</th><th class="p-3 w-20">寬限</th><th class="p-3 w-40">CC 副本</th><th class="p-3">監控分頁 (Tag)</th></tr>
+              </thead>
+              <tbody id="batch-config-tbody" class="divide-y divide-slate-100"></tbody>
+            </table>
+          </div>
+        </div>
+        <div class="border-t border-slate-200 p-4 bg-white flex justify-end gap-4 flex-shrink-0">
+          <button onclick="document.getElementById('batch-config-modal').classList.add('hidden')" class="px-6 py-2 border border-slate-300 rounded text-slate-600 font-bold hover:bg-slate-50">取消</button>
+          <button onclick="saveBatchConfigs()" id="btn-save-batch-cfg" class="px-8 py-2 bg-blue-600 text-white rounded font-bold hover:bg-blue-700 shadow-lg flex items-center"><i class="fa-solid fa-floppy-disk mr-2"></i> 儲存所有變更</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="preview-modal" class="fixed inset-0 bg-slate-900/50 z-50 hidden flex items-center justify-center p-4 backdrop-blur-sm">
+      <div class="bg-white rounded-xl shadow-2xl w-full max-w-6xl h-[95vh] flex flex-col overflow-hidden animate-[modal-enter_0.3s_ease-out]">
+        <div class="bg-slate-800 text-white px-6 py-3 flex justify-between items-center flex-shrink-0">
+          <div><h3 class="text-lg font-bold" id="modal-title">發送預覽</h3></div>
+          <button onclick="closeModal()" class="text-slate-400 hover:text-white"><i class="fa-solid fa-xmark text-xl"></i></button>
+        </div>
+        <div class="flex-1 flex overflow-hidden">
+          <div class="w-1/4 border-r border-slate-200 bg-slate-50 flex flex-col">
+            <div class="p-3 border-b font-bold text-sm text-slate-600 flex justify-between"><span>收件人</span><span id="modal-count" class="bg-slate-200 px-2 rounded text-xs py-0.5">0</span></div>
+            <div id="modal-list" class="flex-1 overflow-y-auto custom-scrollbar"></div>
+          </div>
+          <div class="w-3/4 bg-slate-100 flex flex-col overflow-hidden relative">
+            <div class="p-4 bg-white border-b shadow-sm flex flex-col gap-2 flex-shrink-0 z-10">
+              <div class="flex justify-between items-center text-xs font-bold text-slate-500 mb-1">
+                <span><i class="fa-solid fa-pen-to-square"></i> 本次發送內容調整</span><span id="cc-indicator" class="hidden font-normal bg-slate-200 px-2 py-0.5 rounded">CC: ...</span>
+              </div>
+              <input id="modal-input-sub" class="border rounded p-2 text-sm font-bold w-full focus:ring-2 focus:ring-blue-500 outline-none" oninput="renderModalPreview()">
+              <textarea id="modal-input-body" class="border rounded p-2 text-sm w-full h-24 focus:ring-2 focus:ring-blue-500 outline-none resize-none" oninput="renderModalPreview()"></textarea>
+            </div>
+            <div class="flex-1 p-8 overflow-auto custom-scrollbar flex flex-col items-center">
+              <div class="flex gap-2 mb-4 self-end">
+                <button onclick="changeModalPreview(-1)" class="w-8 h-8 bg-white rounded-full shadow hover:bg-blue-50"><i class="fa-solid fa-chevron-left"></i></button>
+                <button onclick="changeModalPreview(1)" class="w-8 h-8 bg-white rounded-full shadow hover:bg-blue-50"><i class="fa-solid fa-chevron-right"></i></button>
+              </div>
+              <div id="modal-email-preview" class="bg-white shadow-lg w-full max-w-2xl h-fit min-h-[400px] transition-all"></div>
+            </div>
+          </div>
+        </div>
+        <div class="border-t border-slate-200 p-4 bg-white flex justify-end gap-4 flex-shrink-0">
+          <button onclick="closeModal()" class="px-6 py-2 border border-slate-300 rounded text-slate-600 font-bold hover:bg-slate-50">取消</button>
+          <button onclick="confirmSendBatch()" id="btn-modal-send" class="px-8 py-2 bg-blue-600 text-white rounded font-bold hover:bg-blue-700 shadow-lg flex items-center"><i class="fa-solid fa-paper-plane mr-2"></i> 確認發送所有信件</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="config-modal" class="fixed inset-0 bg-slate-900/50 z-50 hidden flex items-center justify-center p-4 backdrop-blur-sm">
+      <div class="bg-white rounded-xl shadow-2xl w-full max-w-lg animate-[modal-enter_0.3s_ease-out] overflow-hidden flex flex-col max-h-[90vh]">
+        <div class="bg-slate-800 text-white px-6 py-4 flex justify-between items-center flex-shrink-0">
+          <h3 class="font-bold text-lg" id="modal-title">設定連結</h3>
+          <button onclick="document.getElementById('config-modal').classList.add('hidden')" class="text-slate-400 hover:text-white"><i class="fa-solid fa-xmark text-xl"></i></button>
+        </div>
+        <div class="p-6 space-y-4 overflow-y-auto custom-scrollbar">
+          <input type="hidden" id="cfg-original-role">
+          <div><label class="block text-xs font-bold text-slate-500 mb-1">檔案標題</label><input id="cfg-name" type="text" class="w-full border border-slate-300 rounded p-2 text-sm focus:border-blue-500 outline-none font-bold"></div>
+          <div><label class="block text-xs font-bold text-slate-500 mb-1">Google Sheet 網址</label><input id="cfg-url" type="text" class="w-full border border-slate-300 rounded p-2 text-sm focus:border-blue-500 outline-none font-mono text-xs"></div>
+          <div class="bg-slate-50 p-3 rounded border border-slate-200">
+              <label class="block text-xs font-bold text-slate-500 mb-2">連結身分</label>
+              <div class="flex gap-4">
+                  <label class="flex items-center cursor-pointer"><input type="checkbox" id="chk-role-subject" class="w-4 h-4 text-blue-600 rounded"> <span class="ml-2 text-sm font-bold text-slate-700">任課班級</span></label>
+                  <label class="flex items-center cursor-pointer"><input type="checkbox" id="chk-role-homeroom" class="w-4 h-4 text-purple-600 rounded"> <span class="ml-2 text-sm font-bold text-slate-700">導師科目</span></label>
+              </div>
+          </div>
+          <div><label class="block text-xs font-bold text-slate-500 mb-1">寬限天數</label><input id="cfg-days" type="number" class="w-full border border-slate-300 rounded p-2 text-sm" value="7"></div>
+          <div>
+             <div class="flex justify-between items-end mb-1"><label class="block text-xs font-bold text-slate-500">監控分頁</label><button id="btn-refresh-sheets" onclick="refreshSheetListInModal()" class="text-[10px] bg-slate-100 hover:bg-slate-200 px-2 py-0.5 rounded text-slate-600"><i class="fa-solid fa-arrows-rotate mr-1"></i>讀取分頁</button></div>
+             <div id="cfg-sheets-area" class="border border-slate-300 rounded p-2 h-32 overflow-y-auto bg-slate-50 text-sm"></div>
+          </div>
+          <div class="pt-4 border-t border-slate-100"><label class="block text-xs font-bold text-slate-500 mb-1">Email 副本 (CC)</label><input id="cfg-cc" type="text" class="w-full border border-slate-300 rounded p-2 text-sm"></div>
+        </div>
+        <div class="bg-slate-50 p-4 border-t border-slate-200 flex justify-end gap-3 flex-shrink-0">
+           <button onclick="document.getElementById('config-modal').classList.add('hidden')" class="px-4 py-2 text-slate-500 hover:bg-slate-100 rounded text-sm font-bold">取消</button>
+           <button onclick="confirmSaveConfig()" id="btn-save-cfg" class="px-6 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded text-sm font-bold shadow-md flex items-center"><i class="fa-solid fa-check mr-2"></i> 儲存</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="db-config-modal" class="fixed inset-0 bg-slate-900/50 z-50 hidden flex items-center justify-center p-4 backdrop-blur-sm">
+        <div class="bg-white rounded-xl shadow-2xl w-full max-w-2xl overflow-hidden">
+            <div class="bg-gradient-to-r from-slate-800 to-slate-900 text-white px-6 py-4 flex justify-between items-center">
+                <div><h3 class="text-lg font-bold"><i class="fa-solid fa-server mr-2 text-green-400"></i>家長查詢資料庫設定</h3></div>
+                <button onclick="document.getElementById('db-config-modal').classList.add('hidden')" class="text-slate-400 hover:text-white"><i class="fa-solid fa-xmark text-xl"></i></button>
+            </div>
+            <div class="p-8 space-y-6">
+                <div>
+                    <label class="block text-xs font-bold text-slate-500 mb-2">中繼資料庫網址</label>
+                    <div class="flex gap-2">
+                        <input id="db-url" class="flex-1 border border-slate-300 rounded px-3 py-2 text-sm outline-none font-mono" placeholder="https://docs.google.com/...">
+                        <button onclick="window.open(document.getElementById('db-url').value, '_blank')" class="px-3 py-2 bg-slate-100 hover:bg-slate-200 rounded text-slate-600 text-sm font-bold">開啟</button>
+                    </div>
+                </div>
+            </div>
+            <div class="bg-slate-50 p-4 border-t border-slate-200 flex justify-end gap-3">
+                <button onclick="document.getElementById('db-config-modal').classList.add('hidden')" class="px-5 py-2 text-slate-500 font-bold text-sm">關閉</button>
+                <button onclick="syncToDatabase()" id="btn-db-sync" class="px-6 py-2 bg-green-600 hover:bg-green-700 text-white rounded font-bold shadow-lg flex items-center"><i class="fa-solid fa-cloud-arrow-up mr-2"></i> 儲存並同步</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="sync-selector-modal" class="fixed inset-0 bg-slate-900/50 z-50 hidden flex items-center justify-center p-4 backdrop-blur-sm">
+      <div class="bg-white rounded-xl shadow-2xl w-full max-w-4xl h-[85vh] flex flex-col overflow-hidden animate-[modal-enter_0.3s_ease-out]">
+        <div class="bg-gradient-to-r from-blue-700 to-indigo-800 text-white px-6 py-4 flex justify-between items-center flex-shrink-0">
+          <div><h3 class="text-xl font-bold"><i class="fa-solid fa-cloud-arrow-up mr-2"></i>選擇要同步的內容</h3></div>
+          <button onclick="document.getElementById('sync-selector-modal').classList.add('hidden')" class="text-blue-300 hover:text-white"><i class="fa-solid fa-xmark text-2xl"></i></button>
+        </div>
+        <div class="flex-1 overflow-auto custom-scrollbar p-6 bg-slate-100" id="sync-selector-body"></div>
+        <div class="border-t border-slate-200 p-4 bg-white flex justify-end gap-4 flex-shrink-0">
+          <button onclick="document.getElementById('sync-selector-modal').classList.add('hidden')" class="px-6 py-2 border border-slate-300 rounded text-slate-600 font-bold hover:bg-slate-50">取消</button>
+          <button onclick="confirmSyncExecution()" id="btn-confirm-sync" class="px-8 py-2 bg-blue-600 text-white rounded font-bold hover:bg-blue-700 shadow-lg flex items-center"><i class="fa-solid fa-check mr-2"></i> 確認同步</button>
+        </div>
+      </div>
+    </div>
+
+  </main>
+
+  <script>
+    // JS_Utils
+    let toastTimer = null;
+    function showToast(title, msg, type, duration) {
+      const t = document.getElementById('toast');
+      if (toastTimer) { clearTimeout(toastTimer); toastTimer = null; }
+      document.getElementById('toastTitle').innerText = title;
+      document.getElementById('toastMsg').innerHTML = msg;
+      t.className = `fixed top-20 right-8 bg-white border-l-4 shadow-lg rounded-md px-6 py-4 transition-all duration-500 z-50 max-w-sm transform translate-x-0 opacity-100 ${type==='error'?'border-red-500':type==='success'?'border-green-500':'border-blue-500'}`;
+      const time = duration || 3000;
+      toastTimer = setTimeout(() => { t.classList.remove('translate-x-0', 'opacity-100'); t.classList.add('translate-x-full', 'opacity-0', 'pointer-events-none'); }, time);
+    }
+    function focusTagInput(container) { container.querySelector('input').focus(); }
+    function handleTagKey(e) {
+      const input = e.target; const container = input.parentElement; const val = input.value.trim();
+      if (e.key === 'Enter' || e.key === ',') { e.preventDefault(); if (val) { addTag(container, val); input.value = ""; } }
+      else if (e.key === 'Backspace' && val === "") { const tags = container.querySelectorAll('.tag-chip'); if (tags.length > 0) { tags[tags.length - 1].remove(); } }
+    }
+    function addTag(container, text) {
+      const chip = document.createElement('div'); chip.className = "tag-chip animate-[fadeIn_0.2s_ease-out]"; chip.dataset.val = text; 
+      chip.innerHTML = `<span>${text}</span><button onclick="this.parentElement.remove()"><i class="fa-solid fa-xmark"></i></button>`; container.insertBefore(chip, container.querySelector('input'));
+    }
+
+    // JS_Core
+    let appData = { mode: 'subject', subjectClasses: [], homeroomClasses: [], get classes() { return this.mode === 'homeroom' ? this.homeroomClasses : this.subjectClasses; }, set classes(val) { if(this.mode === 'homeroom') this.homeroomClasses = val; else this.subjectClasses = val; }, currentClass: null, templates: {}, pendingFiles: [] };
+    let batchData = { type: '', list: [], currentIndex: 0, sheetName: '' };
+    let reportRawData = { full: [], headers: [], selectedCols: [] };
+
+    window.onload = function() { switchView('dashboard'); refreshAppData(); loadTemplates(); updateModeUI(); };
+
+    function switchView(view) {
+        document.querySelectorAll('.view-section').forEach(el => el.classList.add('hidden'));
+        const targetEl = document.getElementById('view-' + view);
+        if(targetEl) targetEl.classList.remove('hidden');
+        document.querySelectorAll('.nav-btn').forEach(btn => btn.classList.remove('bg-slate-800', 'text-blue-400', 'font-semibold', 'shadow-inner'));
+        if (view === 'dashboard') { const dashBtnId = appData.mode === 'homeroom' ? 'nav-dash-homeroom' : 'nav-dash-subject'; const activeBtn = document.getElementById(dashBtnId); if(activeBtn) activeBtn.classList.add('bg-slate-800', 'text-blue-400', 'font-semibold', 'shadow-inner'); } else { const activeBtn = document.getElementById('nav-' + view); if(activeBtn) activeBtn.classList.add('bg-slate-800', 'text-blue-400', 'font-semibold', 'shadow-inner'); }
+        if(view === 'link') refreshPendingList();
+    }
+
+    function refreshAppData() {
+        google.script.run.withSuccessHandler(data => { appData.subjectClasses = data.subject || []; appData.homeroomClasses = data.homeroom || []; if(typeof renderSettingsList === 'function') renderSettingsList(); if(typeof renderDashboardPicker === 'function') renderDashboardPicker(); }).initAppData();
+    }
+
+    function switchMode(newMode) { if(appData.mode === newMode) return; appData.mode = newMode; appData.currentClass = null; updateModeUI(); switchView('dashboard'); if(typeof showDashboardPicker === 'function') showDashboardPicker(); if(typeof renderDashboardPicker === 'function') renderDashboardPicker(); if(typeof renderSettingsList === 'function') renderSettingsList(); showToast("模式切換", `已切換至「${newMode === 'homeroom' ? '導師' : '任課'}」模式`, "success",1000); }
+    function updateModeUI() { const isHome = appData.mode === 'homeroom'; const btnSubject = document.getElementById('mode-btn-subject'); const btnHomeroom = document.getElementById('mode-btn-homeroom'); if(btnSubject && btnHomeroom) { if(isHome) { btnHomeroom.classList.add('bg-pink-600', 'text-white', 'shadow-lg'); btnHomeroom.classList.remove('bg-slate-800', 'text-slate-400'); btnSubject.classList.add('bg-slate-800', 'text-slate-400'); btnSubject.classList.remove('bg-blue-600', 'text-white', 'shadow-lg'); } else { btnSubject.classList.add('bg-blue-600', 'text-white', 'shadow-lg'); btnSubject.classList.remove('bg-slate-800', 'text-slate-400'); btnHomeroom.classList.add('bg-slate-800', 'text-slate-400'); btnHomeroom.classList.remove('bg-pink-600', 'text-white', 'shadow-lg'); } } const linkTitle = document.getElementById('settings-link-title'); if(linkTitle) linkTitle.innerText = isHome ? "科目連結管理 (導師班)" : "班級連結管理 (任課班)"; }
+    function switchModeAndDash(targetMode) { appData.mode = targetMode; appData.currentClass = null; updateModeUI(); switchView('dashboard'); if(typeof showDashboardPicker === 'function') showDashboardPicker(); if(typeof renderDashboardPicker === 'function') renderDashboardPicker(); }
+
+    function openModal() { document.getElementById('preview-modal').classList.remove('hidden'); document.getElementById('modal-title').innerText = batchData.type === 'missing' ? "缺交通知預覽" : "成績單預覽"; document.getElementById('modal-count').innerText = batchData.list.length; const cc = appData.currentClass.cc; const ccInd = document.getElementById('cc-indicator'); if(cc) { ccInd.classList.remove('hidden'); ccInd.innerText = `CC: ${cc}`; } else { ccInd.classList.add('hidden'); } const subInp = document.getElementById('modal-input-sub'); const bodInp = document.getElementById('modal-input-body'); if(batchData.type === 'missing') { subInp.value = appData.templates.missingSubject; bodInp.value = appData.templates.missingBody; } else { subInp.value = appData.templates.reportSubject; bodInp.value = appData.templates.reportBody; } const listEl = document.getElementById('modal-list'); listEl.innerHTML = ""; batchData.list.forEach((s, i) => { const div = document.createElement('div'); div.className = `p-3 border-b cursor-pointer hover:bg-blue-50 text-sm ${i===0?'bg-blue-100 border-l-4 border-blue-500':''}`; div.id = `modal-item-${i}`; div.onclick = () => { batchData.currentIndex = i; renderModalPreview(); updateListActive(); }; div.innerHTML = `<div class="font-bold">${s._seatNo || s.seatNo} ${s._name || s.name}</div><div class="text-xs text-slate-500 truncate">${s._email || s.email}</div>`; listEl.appendChild(div); }); batchData.currentIndex = 0; renderModalPreview(); }
+    function closeModal() { document.getElementById('preview-modal').classList.add('hidden'); }
+    function updateListActive() { document.querySelectorAll('#modal-list > div').forEach((el, i) => { el.className = `p-3 border-b cursor-pointer hover:bg-blue-50 text-sm ${i===batchData.currentIndex?'bg-blue-100 border-l-4 border-blue-500':''}`; }); }
+    function changeModalPreview(d) { let next = batchData.currentIndex + d; if(next >= 0 && next < batchData.list.length) { batchData.currentIndex = next; renderModalPreview(); updateListActive(); document.getElementById(`modal-item-${next}`).scrollIntoView({block: 'nearest'}); } }
+    function renderModalPreview() { const s = batchData.list[batchData.currentIndex]; let rawSub = document.getElementById('modal-input-sub').value; let rawBody = document.getElementById('modal-input-body').value; let subject = "", html = ""; if (batchData.type === 'missing') { subject = rawSub.replace('{{姓名}}', s.name); let warnHtml = "", expHtml = ""; const headerRow = '<tr style="background:#fff7ed; text-align:left;"><th style="padding:8px;color:#c2410c">日期</th><th style="padding:8px;color:#c2410c">作業名稱</th><th style="padding:8px;color:#c2410c">狀態</th></tr>'; if (s.warnings && s.warnings.length > 0) { const rows = s.warnings.map(item => `<tr><td style="padding:6px;border-bottom:1px solid #eee;">${item.date}</td><td style="padding:6px;border-bottom:1px solid #eee;font-weight:bold;">${item.task}</td><td style="padding:6px;border-bottom:1px solid #eee;color:#d97706;font-weight:bold;">${item.status}</td></tr>`).join(''); warnHtml = `<div style="margin-bottom:20px;"><div style="background:#fff7ed;color:#9a3412;padding:8px;font-weight:bold;font-size:14px;border-left:4px solid #f97316;">⚠️ 尚未繳交 (請盡速補交)</div><table style="width:100%;font-size:14px;border-collapse:collapse;margin-top:5px;">${headerRow}${rows}</table></div>`; } if (s.expired && s.expired.length > 0) { const rows = s.expired.map(item => `<tr><td style="padding:6px;border-bottom:1px solid #eee;color:#999;">${item.date}</td><td style="padding:6px;border-bottom:1px solid #eee;color:#999;">${item.task}</td><td style="padding:6px;border-bottom:1px solid #eee;color:#dc2626;">${item.status}</td></tr>`).join(''); expHtml = `<div style="margin-bottom:10px;"><div style="background:#f3f4f6;color:#666;padding:8px;font-weight:bold;font-size:14px;border-left:4px solid #999;">❌ 已逾期 (無法補交)</div><table style="width:100%;font-size:14px;border-collapse:collapse;margin-top:5px;">${headerRow}${rows}</table></div>`; } let body = rawBody.replace('{{姓名}}', s.name).replace('{{分頁名稱}}', "").replace('{{缺交列表}}', warnHtml).replace('{{逾期列表}}', expHtml).replace(/\n/g, '<br>'); html = `<div style="padding:20px; background:#fff7ed; font-family:sans-serif;"><div style="background:#fff; border:1px solid #fed7aa; border-radius:8px; overflow:hidden;"><div style="background:#f97316; color:white; padding:12px; text-align:center; font-weight:bold;">${subject}</div><div style="padding:20px; color:#333; line-height:1.6;">${body}</div></div></div>`; } else { subject = rawSub.replace('{{姓名}}', s._name); const cols = reportRawData.selectedCols; const tableHeader = cols.map(c=>`<th style="border:1px solid #999;padding:8px;">${c}</th>`).join(''); const tableBody = cols.map(c=> { let v = s[c]===undefined?'':s[c]; let st = "border:1px solid #999;padding:10px;text-align:center;"; if(typeof v==='number'&&v<60) st+="color:red;font-weight:bold;"; return `<td style="${st}">${v}</td>`; }).join(''); const tableHtml = `<table style="width:100%;border-collapse:collapse;border:2px solid #444;"><tr style="background:#dbeafe;">${tableHeader}</tr><tr>${tableBody}</tr></table>`; let body = rawBody.replace('{{姓名}}', s._name).replace('{{成績表格}}', tableHtml).replace(/\n/g, '<br>'); html = `<div style="padding:20px; background:#eff6ff; font-family:sans-serif;"><div style="background:#fff; border-radius:8px; overflow:hidden; box-shadow:0 2px 4px rgba(0,0,0,0.1);"><div style="background:#2563eb; color:white; padding:12px; text-align:center; font-weight:bold;">${subject}</div><div style="padding:20px; color:#333; line-height:1.6;">${body}</div></div></div>`; } document.getElementById('modal-email-preview').innerHTML = html; }
+    async function confirmSendBatch() { if(!confirm("確定要發送這 " + batchData.list.length + " 封信嗎？")) return; const btn = document.getElementById('btn-modal-send'); btn.innerText = "發送中..."; btn.disabled = true; const cc = appData.currentClass.cc; let count = 0; const finalSubTpl = document.getElementById('modal-input-sub').value; for (const s of batchData.list) { batchData.currentIndex = batchData.list.indexOf(s); renderModalPreview(); const finalHtml = document.getElementById('modal-email-preview').innerHTML; let sub = batchData.type==='missing' ? finalSubTpl.replace('{{姓名}}', s.name) : finalSubTpl.replace('{{姓名}}', s._name); const email = s._email || s.email; await new Promise(r => google.script.run.withSuccessHandler(r).sendEmailDirect(email, sub, finalHtml, cc)); count++; btn.innerText = `發送中 (${count}/${batchData.list.length})`; } showToast("完成", "全數發送完畢", "success",1000); closeModal(); btn.innerText = "確認發送所有信件"; btn.disabled = false; }
+
+    // JS_Creator
+    let currentFolderId = ""; let currentParentId = "";
+    function initCreator() { refreshFolderInfo(); addBatchRow(); }
+    function openCreatorTool(toolId) { document.getElementById('creator-header-section').classList.add('hidden'); document.getElementById('creator-menu').classList.add('hidden'); document.getElementById('creator-workspace').classList.remove('hidden'); const titles = { 'single': '成績單範本', 'batch': '批次建立工廠', 'db': '資料中繼站' }; document.getElementById('workspace-title').innerText = titles[toolId] || "工具"; document.querySelectorAll('.creator-tool-panel').forEach(el => el.classList.add('hidden')); document.getElementById('tool-' + toolId).classList.remove('hidden'); if(toolId === 'batch') document.getElementById('batch-toolbar').classList.remove('hidden'); else document.getElementById('batch-toolbar').classList.add('hidden'); }
+    function backToCreatorMenu() { document.getElementById('creator-workspace').classList.add('hidden'); document.getElementById('creator-header-section').classList.remove('hidden'); document.getElementById('creator-menu').classList.remove('hidden'); }
+    function refreshFolderInfo() { document.getElementById('current-folder-display').innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i>'; google.script.run.withSuccessHandler(res => { if(res.success) { document.getElementById('current-folder-display').innerText = res.name || "根目錄"; currentFolderId = res.id; } }).apiGetStorageFolder(); }
+    function addBatchRow() { const tbody = document.getElementById('batch-table-body'); const tr = document.createElement('tr'); tr.className = "batch-row border-b hover:bg-slate-50 align-top"; tr.innerHTML = ` <td class="py-3 px-2 text-center text-slate-300 pt-4"><i class="fa-solid fa-grip-vertical"></i></td> <td class="py-2 px-2"><input type="text" class="inp-title w-full border rounded p-1.5 text-sm font-bold text-slate-700" placeholder="例如：701成績"></td> <td class="py-2 px-2"> <textarea class="inp-students w-full border rounded p-1.5 text-xs font-mono h-10 focus:h-24 transition-all resize-none" placeholder="留空則自動生成&#10;01,王小明,s1@mail&#10;02,李大華,s2@mail"></textarea> </td> <td class="py-2 px-2"><input type="text" class="inp-sheets w-full border rounded p-1.5 text-sm" value="段考,平時,習作"></td> <td class="py-2 px-2"><input type="text" class="inp-ta w-full border rounded p-1.5 text-sm" placeholder="TA Email"></td> <td class="py-2 px-2 text-center pt-3"><input type="checkbox" class="inp-public w-4 h-4 cursor-pointer"></td> <td class="py-2 px-2 text-center pt-3"><button onclick="this.closest('tr').remove()" class="text-slate-300 hover:text-red-500 transition-colors"><i class="fa-solid fa-trash"></i></button></td> `; tbody.appendChild(tr); }
+    function runSingleCreate() { const title = document.getElementById('inp-single-title').value.trim(); const taEmail = document.getElementById('inp-single-ta').value.trim(); const isPublic = document.getElementById('chk-single-public').checked; const sheets = document.getElementById('inp-single-sheets').value; if(!title) return showToast("缺少資訊", "請輸入檔案名稱", "error"); const btn = document.getElementById('btn-create-single'); btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin mr-2"></i>建立中...'; btn.disabled = true; const config = { title, sheetsStr: sheets, taEmail, permission: { isPublic } }; google.script.run.withSuccessHandler(res => { btn.innerHTML = '<i class="fa-solid fa-plus mr-2"></i>立即建立檔案'; btn.disabled = false; if(res.success) showToast("建立成功", "檔案已建立", "success"); else showToast("建立失敗", res.msg, "error"); }).apiBatchCreateTemplates([config]); }
+    function runBatchCreate() { const rows = document.querySelectorAll('.batch-row'); let configs = []; rows.forEach(row => { const title = row.querySelector('.inp-title').value.trim(); if(title) { configs.push({ title: title, sheetsStr: row.querySelector('.inp-sheets').value, studentsStr: row.querySelector('.inp-students').value,  taEmail: row.querySelector('.inp-ta').value, permission: { isPublic: row.querySelector('.inp-public').checked } }); } }); if(configs.length === 0) return showToast("無效輸入", "請至少輸入一個檔案名稱", "error"); const btn = document.getElementById('btn-run-batch-top'); btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin mr-2"></i>生成與模擬資料中...'; btn.disabled = true; google.script.run.withSuccessHandler(res => { btn.innerHTML = '<i class="fa-solid fa-play mr-1"></i> 開始生成'; btn.disabled = false; showToast("批次完成", `${res.log}`, "success");  document.getElementById('batch-table-body').innerHTML = ''; addBatchRow(); }).apiBatchCreateTemplates(configs); }
+    function createDatabase() { const name = document.getElementById('inp-db-name').value.trim(); if(!name) return showToast("缺少資訊", "請輸入資料庫名稱", "error"); const btn = document.getElementById('btn-create-db'); btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin mr-2"></i>建立中...'; btn.disabled = true; google.script.run.withSuccessHandler(res => { btn.innerHTML = '立即建立'; btn.disabled = false; if(res.success) { const area = document.getElementById('db-result-link'); area.classList.remove('hidden'); area.innerHTML = `<div class="font-bold">建立成功！</div><div class="text-sm mt-1">請將此檔案網址複製到「系統設定」頁面。</div><a href="${res.url}" target="_blank" class="inline-block mt-2 font-bold underline hover:text-emerald-950">開啟檔案</a>`; showToast("建立成功", "資料庫已準備就緒", "success"); } else alert(res.msg); }).createDataHubSheet(name); }
+
+    // JS_Dashboard
+    function renderDashboardPicker() { const grid = document.getElementById('dash-class-grid'); const noData = document.getElementById('dash-no-data'); const title = document.getElementById('picker-title'); const desc = document.getElementById('picker-desc'); if(appData.mode === 'homeroom') { title.innerText = "導師班級管理"; desc.innerText = "查看全班總表或點擊單科進行管理"; } else { title.innerText = "請選擇要管理的班級"; desc.innerText = "點擊卡片進入管理介面"; } if(!appData.classes || appData.classes.length === 0) { grid.innerHTML = ""; noData.classList.remove('hidden'); return; } noData.classList.add('hidden'); let html = ""; if(appData.mode === 'homeroom') { html += `<button onclick="openMasterSheet()" class="col-span-full md:col-span-2 bg-gradient-to-r from-pink-600 to-purple-600 p-6 rounded-xl shadow-lg hover:shadow-xl hover:-translate-y-1 transition-all text-left group relative overflow-hidden"><div class="absolute top-0 right-0 p-4 opacity-20 text-white"><i class="fa-solid fa-table-cells text-8xl"></i></div><div class="flex items-center gap-4 relative z-10"><div class="w-16 h-16 rounded-full bg-white/20 text-white flex items-center justify-center text-3xl font-bold backdrop-blur-sm"><i class="fa-solid fa-crown"></i></div><div><h4 class="font-bold text-2xl text-white mb-1">全班成績總表</h4><p class="text-pink-100 text-sm">彙整所有連結科目的成績資料</p></div></div></button>`; } html += appData.classes.map((c, idx) => `<button onclick="selectClassFromDashboard(${idx})" class="bg-white p-6 rounded-xl shadow-sm border border-slate-200 hover:border-blue-400 hover:shadow-md hover:-translate-y-1 transition-all text-left group"><div class="flex justify-between items-start mb-3"><div class="w-12 h-12 rounded-full ${appData.mode==='homeroom'?'bg-purple-100 text-purple-600 group-hover:bg-purple-600':'bg-blue-100 text-blue-600 group-hover:bg-blue-600'} flex items-center justify-center text-xl font-bold group-hover:text-white transition-colors">${c.name.substring(0,1)}</div><i class="fa-solid fa-chevron-right text-slate-300 ${appData.mode==='homeroom'?'group-hover:text-purple-500':'group-hover:text-blue-500'}"></i></div><h4 class="font-bold text-lg text-slate-700 mb-1">${c.name}</h4><div class="text-xs text-slate-400 truncate">監控: ${c.targets ? c.targets.length : 0} 個分頁</div></button>`).join(''); grid.innerHTML = html; }
+    function selectClassFromDashboard(index) { appData.currentClass = appData.classes[index]; document.getElementById('dash-picker').classList.add('hidden'); document.getElementById('dash-content').classList.remove('hidden'); document.getElementById('dash-title-class').innerText = appData.currentClass.name; const badge = document.getElementById('dash-badge-class'); if(appData.mode === 'homeroom') { badge.innerText = "Subject"; badge.className = "bg-purple-100 text-purple-600 text-sm px-2 py-1 rounded mr-3 align-middle"; } else { badge.innerText = "Class"; badge.className = "bg-blue-100 text-blue-600 text-sm px-2 py-1 rounded mr-3 align-middle"; } const targets = appData.currentClass.targets || []; document.getElementById('dash-targets').innerText = targets.join(", ") || "無設定"; document.getElementById('dash-days').innerText = appData.currentClass.days; switchDashTab('missing'); }
+    function openMasterSheet() { document.getElementById('dash-picker').classList.add('hidden'); document.getElementById('dash-content-master').classList.remove('hidden'); syncMasterData(); }
+    function showDashboardPicker() { document.getElementById('dash-content').classList.add('hidden'); document.getElementById('dash-content-master').classList.add('hidden'); document.getElementById('dash-picker').classList.remove('hidden'); appData.currentClass = null; }
+    function switchDashTab(tabName) { const btnMissing = document.getElementById('tab-btn-missing'); const btnReport = document.getElementById('tab-btn-report'); const divMissing = document.getElementById('dash-tab-missing'); const divReport = document.getElementById('dash-tab-report'); if (tabName === 'missing') { btnMissing.className = "flex-1 py-4 text-center font-bold text-amber-600 border-b-4 border-amber-500 bg-amber-50 transition-all"; btnReport.className = "flex-1 py-4 text-center font-bold text-slate-400 border-b-2 border-transparent hover:text-blue-500 transition-all"; divMissing.classList.remove('hidden'); divReport.classList.add('hidden'); } else { btnMissing.className = "flex-1 py-4 text-center font-bold text-slate-400 border-b-2 border-transparent hover:text-amber-500 transition-all"; btnReport.className = "flex-1 py-4 text-center font-bold text-blue-600 border-b-4 border-blue-500 bg-blue-50 transition-all"; divMissing.classList.add('hidden'); divReport.classList.remove('hidden'); loadReportTab(); } }
+    function loadReportTab() { const listArea = document.getElementById('rpt-sheet-list'); if(listArea.children.length > 1 && !listArea.innerHTML.includes("loader")) return; listArea.innerHTML = '<div class="flex justify-center py-4"><div class="loader"></div></div>'; google.script.run.withSuccessHandler(sheets => { if(!sheets || sheets.length === 0) { listArea.innerHTML = `<div class="flex flex-col items-center justify-center py-8 text-center"><p class="text-xs text-slate-400 mb-4">目前沒有設定任何成績分頁</p></div>`; return; } listArea.innerHTML = sheets.map(s => `<button onclick="handleSheetClick(this, '${s}')" class="sheet-btn w-full text-left px-4 py-3 rounded-lg text-sm font-bold text-slate-600 hover:bg-blue-50 hover:text-blue-600 transition-all border border-transparent focus:outline-none flex justify-between items-center group"><span class="truncate">${s}</span><i class="fa-solid fa-chevron-right text-xs opacity-0 group-hover:opacity-100 text-blue-400"></i></button>`).join(''); }).getSheetList(appData.currentClass.url); }
+    function scanMissing() { const targets = appData.currentClass.targets; if(!targets || targets.length === 0) return showToast("錯誤","請先在設定頁設定監控分頁","error",3000); const defaultDate = new Date().toLocaleDateString('en-CA');  const userDate = prompt("【模擬掃描】請輸入「今天日期」以判斷作業是否逾期：\n(系統將以此日期為基準，判斷哪些作業已截止)", defaultDate); if (userDate === null) return;  const btn = document.getElementById('btn-scan'); const originalHtml = btn.innerHTML; btn.innerHTML = '<div class="loader"></div>'; google.script.run.withSuccessHandler(res => { btn.innerHTML = originalHtml; if(!res.success) return showToast("錯誤", res.msg, "error",5000); if(res.data.length === 0) return showToast("很棒", "所有分頁皆無缺交！", "success",1000);  batchData = { type: 'missing', sheetName: 'All Sheets', list: res.data, currentIndex: 0 }; openModal(); }).apiScanAllClassTargets(appData.currentClass.url, targets, appData.currentClass.days, userDate); }
+    function syncMasterData() { const loading = document.getElementById('master-loading'); const empty = document.getElementById('master-empty'); const tbody = document.getElementById('master-tbody'); loading.classList.remove('hidden'); empty.classList.add('hidden'); tbody.innerHTML = ''; google.script.run.withSuccessHandler(res => { loading.classList.add('hidden'); if(res.success) { renderMasterRows(res.data); } else { showToast("同步失敗", res.msg, "error",5000); empty.classList.remove('hidden'); } }).apiFetchHomeroomMasterData(); }
+    function renderMasterRows(data) { const tbody = document.getElementById('master-tbody'); document.getElementById('count-display').innerText = data.length;  const failCount = data.filter(d => d.score === "" || Number(d.score) < 60).length; document.getElementById('count-fail').innerText = failCount; if(data.length === 0) { tbody.innerHTML = `<tr><td colspan="8" class="p-12 text-center text-slate-400 bg-white">目前沒有資料，請點擊上方「同步最新成績」</td></tr>`; return; } let html = data.map((d, i) => { let displayScore = d.score; let scoreClass = "text-slate-700 font-bold"; if (d.score === "" || d.score === null) { displayScore = "缺"; scoreClass = "text-white bg-red-500 rounded px-2 py-0.5 text-xs inline-block";  } else if (Number(d.score) < 60) { scoreClass = "text-red-600 font-bold bg-red-50 px-2 py-0.5 rounded";  }  let rankHtml = `<span class="text-slate-400 text-xs font-mono">#${d.rank}</span>`; if (d.rank === 1) rankHtml = `<span class="bg-yellow-100 text-yellow-700 px-2 py-0.5 rounded-full text-[10px] font-bold shadow-sm border border-yellow-200">🥇 TOP 1</span>`; else if (d.rank === "-") rankHtml = `<span class="text-slate-300">-</span>`; return ` <tr class="hover:bg-indigo-50/50 border-b border-slate-100 transition-colors group"> <td class="p-3 text-center font-mono text-slate-500 text-xs">${d.seatNo}</td> <td class="p-3 font-bold text-slate-700">${d.name}</td> <td class="p-3"><span class="bg-slate-100 text-slate-600 text-[10px] px-2 py-1 rounded border border-slate-200">${d.subject}</span></td> <td class="p-3 text-center text-xs text-slate-400">${d.date}</td> <td class="p-3 text-xs text-slate-500"><div class="truncate max-w-[120px]" title="${d.sheet}">${d.sheet}</div></td> <td class="p-3 text-sm text-slate-600 font-medium">${d.task}</td> <td class="p-3 text-center"><span class="${scoreClass}">${displayScore}</span></td> <td class="p-3 text-center">${rankHtml}</td> </tr>`; }).join(''); tbody.innerHTML = html; }
+
+    // JS_Report
+    function handleSheetClick(btnElement, sheetName) { const allBtns = document.querySelectorAll('.sheet-btn'); allBtns.forEach(b => { b.disabled = true; b.classList.add('opacity-50', 'cursor-wait'); b.classList.remove('bg-blue-600', 'text-white', 'shadow-md'); if(!b.classList.contains('text-slate-600')) b.classList.add('text-slate-600', 'hover:bg-blue-50'); }); btnElement.classList.remove('text-slate-600', 'hover:bg-blue-50', 'opacity-50'); btnElement.classList.add('bg-blue-600', 'text-white', 'shadow-md', 'opacity-100'); document.getElementById('col-mask').classList.remove('hidden'); document.getElementById('preview-mask').classList.remove('hidden'); document.getElementById('column-list').innerHTML = '<div class="p-4 text-center"><div class="loader mx-auto"></div></div>'; toggleSendButton(false); google.script.run.withSuccessHandler(res => { allBtns.forEach(b => { b.disabled = false; b.classList.remove('opacity-50', 'cursor-wait'); }); if(res.success) { reportRawData.sheetName = sheetName; reportRawData.headers = res.headers; renderColumnPicker(res.headerRowIndex); } else { showToast("讀取失敗", res.msg, "error",5000); document.getElementById('preview-mask').classList.add('hidden'); } }).getSheetHeaders(appData.currentClass.url, sheetName); }
+    function renderColumnPicker(rowIndex) { const div = document.getElementById('column-list'); div.innerHTML = ""; reportRawData.headers.forEach(h => { if(!h) return; const checked = !['座號','姓名','Email','電子郵件'].includes(h) ? "checked" : ""; div.innerHTML += `<label class="flex items-center p-2 rounded hover:bg-slate-50 cursor-pointer transition-colors border-b border-slate-100 last:border-0"><input type="checkbox" value="${h}" class="col-check w-4 h-4 text-blue-600 rounded focus:ring-blue-500 border-gray-300 mr-3" ${checked} onchange="updateSimplePreview()"> <span class="text-sm text-slate-700 select-none">${h}</span></label>`; }); document.getElementById('col-mask').classList.add('hidden'); google.script.run.withSuccessHandler(res => { document.getElementById('preview-mask').classList.add('hidden'); if(res.success) { reportRawData.full = res.data; showToast("已載入", `${res.data.length} 筆成績資料`, "success",1000); updateSimplePreview(); toggleSendButton(true); } }).fetchSheetDataForEmail(appData.currentClass.url, reportRawData.sheetName, rowIndex); }
+    function updateSimplePreview() { const status = document.getElementById('preview-status'); status.classList.remove('hidden'); reportRawData.selectedCols = Array.from(document.querySelectorAll('.col-check:checked')).map(c=>c.value); const previewBox = document.getElementById('simple-preview'); if(reportRawData.full.length === 0) { previewBox.innerHTML = '<div class="text-slate-400 text-center mt-10">無資料</div>'; return; } const s = reportRawData.full[0]; const cols = reportRawData.selectedCols; const th = cols.map(c=>`<th class="border border-slate-300 px-3 py-2 bg-slate-50 text-slate-600 font-bold">${c}</th>`).join(''); const td = cols.map(c=>`<td class="border border-slate-300 px-3 py-2 text-center text-slate-800">${s[c]||''}</td>`).join(''); const html = `<div class="mb-4 text-center"><div class="font-bold text-lg text-blue-700">${s._name || '學生姓名'}</div><div class="text-xs text-slate-400">預覽視圖 (第一位學生)</div></div><table class="w-full border-collapse text-xs shadow-sm"><thead><tr>${th}</tr></thead><tbody><tr>${td}</tr></tbody></table><div class="mt-4 text-xs text-slate-400 text-center border-t pt-2">* 實際信件將包含完整的 CSS 樣式</div>`; previewBox.innerHTML = html; setTimeout(() => status.classList.add('hidden'), 300); }
+    function toggleSendButton(enable) { const btn = document.getElementById('btn-prepare-send'); if(enable) { btn.disabled = false; btn.classList.remove('bg-slate-300', 'cursor-not-allowed', 'shadow-none'); btn.classList.add('bg-blue-600', 'hover:bg-blue-700', 'shadow-lg', 'cursor-pointer'); } else { btn.disabled = true; btn.classList.add('bg-slate-300', 'cursor-not-allowed', 'shadow-none'); btn.classList.remove('bg-blue-600', 'hover:bg-blue-700', 'shadow-lg', 'cursor-pointer'); } }
+    function openBatchModal(type) { if(type === 'report') { reportRawData.selectedCols = Array.from(document.querySelectorAll('.col-check:checked')).map(c=>c.value); const targets = reportRawData.full.filter(s => s._email); if(targets.length === 0) return showToast("錯誤", "沒有可發送的對象 (缺 Email)", "error",5000); batchData = { type: 'report', sheetName: reportRawData.sheetName, list: targets, currentIndex: 0 }; openModal(); } }
+
+    // JS_Settings
+    let currentConfig = { index: -1, role: '' };
+    function loadTemplates() { google.script.run.withSuccessHandler(tpl => { appData.templates = tpl; document.getElementById('tpl-missing-sub').value = tpl.missingSubject; document.getElementById('tpl-missing-body').value = tpl.missingBody; document.getElementById('tpl-report-sub').value = tpl.reportSubject; document.getElementById('tpl-report-body').value = tpl.reportBody; }).loadUserTemplates(); }
+    function saveTemplates() { const tpl = { missingSubject: document.getElementById('tpl-missing-sub').value, missingBody: document.getElementById('tpl-missing-body').value, reportSubject: document.getElementById('tpl-report-sub').value, reportBody: document.getElementById('tpl-report-body').value }; google.script.run.withSuccessHandler(() => showToast("已儲存", "模板更新成功", "success",1000)).saveUserTemplates(JSON.stringify(tpl)); appData.templates = tpl; }
+    function renderSettingsList() { renderSettingsView(); refreshPendingList(); }
+    function refreshPendingList() { google.script.run.withSuccessHandler(files => { appData.pendingFiles = files; renderSettingsView(); }).apiGetPendingFiles(); }
+    function renderSettingsView() { const pList = document.getElementById('pending-list'); if (appData.pendingFiles.length > 0) { document.getElementById('area-pending').classList.remove('hidden'); pList.innerHTML = appData.pendingFiles.map((f, i) => renderCard(f, i, 'pending')).join(''); } else { document.getElementById('area-pending').classList.add('hidden'); } const sList = document.getElementById('subject-list'); if (appData.subjectClasses.length > 0) { document.getElementById('subject-empty').classList.add('hidden'); sList.innerHTML = appData.subjectClasses.map((c, i) => renderCard(c, i, 'subject')).join(''); } else { sList.innerHTML = ''; document.getElementById('subject-empty').classList.remove('hidden'); } const hList = document.getElementById('homeroom-list'); if (appData.homeroomClasses.length > 0) { document.getElementById('homeroom-empty').classList.add('hidden'); hList.innerHTML = appData.homeroomClasses.map((c, i) => renderCard(c, i, 'homeroom')).join(''); } else { hList.innerHTML = ''; document.getElementById('homeroom-empty').classList.remove('hidden'); } }
+    function renderCard(item, index, role) { const isPending = role === 'pending'; const theme = isPending ? 'amber' : (role === 'subject' ? 'blue' : 'purple'); const icon = isPending ? 'fa-hourglass-start' : (role === 'subject' ? 'fa-book' : 'fa-graduation-cap'); let badge = isPending ? `<div class="absolute top-3 right-3 bg-amber-100 text-amber-700 text-[10px] px-2 py-1 rounded-full font-bold shadow-sm flex items-center"><i class="fa-solid fa-circle text-[6px] mr-1 animate-pulse"></i>NEW</div>` : ``; let actions = isPending ? `<button onclick="openConfigModal(${index}, '${role}')" class="w-full bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white font-bold py-2 rounded-lg shadow-md shadow-orange-100 transition-all mt-3 text-sm flex items-center justify-center"><i class="fa-solid fa-wrench mr-2"></i> 進行設定</button>` : `<div class="flex gap-1 mt-3 pt-3 border-t border-slate-50"><a href="#" class="flex-1 py-1.5 rounded-lg text-slate-400 hover:text-blue-600 hover:bg-blue-50 text-center transition-colors text-xs font-bold" title="開啟檔案"><i class="fa-solid fa-external-link-alt mr-1"></i>開啟</a><div class="w-px bg-slate-100 my-1"></div><button onclick="openConfigModal(${index}, '${role}')" class="flex-1 py-1.5 rounded-lg text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 transition-colors text-xs font-bold" title="編輯設定"><i class="fa-solid fa-pen mr-1"></i>編輯</button><div class="w-px bg-slate-100 my-1"></div><button onclick="delConf('${item.name}', '${role}')" class="flex-1 py-1.5 rounded-lg text-slate-400 hover:text-red-500 hover:bg-red-50 transition-colors text-xs font-bold" title="刪除連結"><i class="fa-solid fa-trash mr-1"></i>刪除</button></div>`; let metaInfo = !isPending ? `<div class="flex items-center gap-3 mt-1"><div class="text-[10px] font-bold text-slate-400 bg-slate-100 px-2 py-0.5 rounded-md truncate max-w-[60%]"><i class="fa-solid fa-list-ol mr-1"></i>${item.targets ? item.targets.length : 0} 分頁</div><div class="text-[10px] font-bold text-slate-400 bg-slate-100 px-2 py-0.5 rounded-md"><i class="fa-regular fa-clock mr-1"></i>${item.days}天</div></div>` : `<div class="text-xs text-amber-600/60 font-bold mt-1">請點擊設定以啟用</div>`; return `<div class="bg-white rounded-2xl p-5 shadow-[0_2px_8px_rgba(0,0,0,0.04)] hover:shadow-[0_8px_24px_rgba(0,0,0,0.08)] border border-slate-100 hover:border-${theme}-200 relative group transition-all duration-300">${badge}<div class="flex items-start gap-3 mb-1"><div class="w-10 h-10 rounded-xl bg-${theme}-50 text-${theme}-500 flex items-center justify-center text-lg flex-shrink-0"><i class="fa-solid ${icon}"></i></div><div class="overflow-hidden"><div class="font-bold text-base text-slate-700 truncate leading-tight" title="${item.name || item.title}">${item.name || item.title}</div><div class="text-[10px] text-slate-400 truncate font-mono mt-0.5 opacity-60">${item.url}</div></div></div>${metaInfo}${actions}</div>`; }
+    function openManualLinkModal() { currentConfig = { index: -1, role: 'create' }; document.getElementById('config-modal').classList.remove('hidden'); document.getElementById('modal-title').innerText = "新增連結"; document.getElementById('cfg-url').value = ""; document.getElementById('cfg-name').value = ""; document.getElementById('cfg-days').value = 7; document.getElementById('cfg-cc').value = ""; document.getElementById('cfg-original-role').value = "create"; document.getElementById('chk-role-subject').checked = (appData.mode === 'subject'); document.getElementById('chk-role-homeroom').checked = (appData.mode === 'homeroom'); document.getElementById('cfg-sheets-area').innerHTML = '<div class="h-full flex flex-col items-center justify-center text-slate-400 space-y-2"><i class="fa-solid fa-arrow-up text-xl animate-bounce"></i><p class="text-xs">請先貼上網址，再點擊「讀取分頁」</p></div>'; }
+    function openConfigModal(index, role) { currentConfig = { index, role }; let item; if (role === 'pending') item = appData.pendingFiles[index]; else if (role === 'subject') item = appData.subjectClasses[index]; else item = appData.homeroomClasses[index]; document.getElementById('config-modal').classList.remove('hidden'); document.getElementById('modal-title').innerText = "設定連結"; const url = item.url; document.getElementById('cfg-url').value = url; document.getElementById('cfg-original-role').value = role; let displayName = item.name || item.title; if(role === 'pending') { const match = displayName.match(/(\d+)$/); if(match) displayName = match[1]; } document.getElementById('cfg-name').value = displayName; document.getElementById('cfg-days').value = item.days || 7; document.getElementById('cfg-cc').value = item.cc || ''; const existsInSubject = appData.subjectClasses.some(c => c.url === url); const existsInHomeroom = appData.homeroomClasses.some(c => c.url === url); if (role === 'pending') { document.getElementById('chk-role-subject').checked = (appData.mode === 'subject'); document.getElementById('chk-role-homeroom').checked = (appData.mode === 'homeroom'); } else { document.getElementById('chk-role-subject').checked = existsInSubject; document.getElementById('chk-role-homeroom').checked = existsInHomeroom; } refreshSheetListInModal(item.targets || []); }
+    function refreshSheetListInModal(preSelected = []) { const area = document.getElementById('cfg-sheets-area'); const btn = document.getElementById('btn-refresh-sheets'); const icon = btn.querySelector('i'); const url = document.getElementById('cfg-url').value.trim(); if(!url) { area.innerHTML = '<div class="h-full flex items-center justify-center text-red-400 text-xs"><i class="fa-solid fa-circle-exclamation mr-1"></i>請先輸入 Google Sheet 網址</div>'; return; } area.innerHTML = '<div class="h-full flex items-center justify-center text-slate-400 text-xs"><i class="fa-solid fa-circle-notch fa-spin mr-2"></i>讀取中...</div>'; btn.disabled = true; if(icon) icon.classList.add('fa-spin'); google.script.run.withSuccessHandler(sheets => { btn.disabled = false; if(icon) icon.classList.remove('fa-spin'); area.innerHTML = sheets.map(s => { const checked = preSelected.includes(s) ? 'checked' : ''; return `<label class="flex items-center hover:bg-indigo-50 p-2 rounded cursor-pointer transition-colors border-b border-slate-50 last:border-0"><input type="checkbox" value="${s}" name="modal-chk" class="w-4 h-4 text-indigo-600 rounded focus:ring-indigo-500 border-gray-300 mr-2" ${checked}> <span class="text-slate-700 font-medium">${s}</span></label>`; }).join(''); }).getSheetList(url); }
+    function confirmSaveConfig() { const name = document.getElementById('cfg-name').value.trim(); const url = document.getElementById('cfg-url').value.trim(); const days = document.getElementById('cfg-days').value; const cc = document.getElementById('cfg-cc').value; const targets = Array.from(document.querySelectorAll('input[name="modal-chk"]:checked')).map(c => c.value); const isSubject = document.getElementById('chk-role-subject').checked; const isHomeroom = document.getElementById('chk-role-homeroom').checked; const oldRole = document.getElementById('cfg-original-role').value; const index = currentConfig.index; if(!name) return showToast("錯誤", "請輸入名稱", "error",5000); if(!url) return showToast("錯誤", "請輸入網址", "error",5000); if(targets.length === 0) return showToast("提示", "請至少選擇一個監控分頁", "warning",3000); if(!isSubject && !isHomeroom) return showToast("錯誤", "請至少選擇一種身分", "error",5000); const newConfig = { name, url, days, cc, targets }; if(oldRole === 'pending' && index > -1) { appData.pendingFiles.splice(index, 1); } appData.subjectClasses = appData.subjectClasses.filter(c => c.url !== url); if (isSubject) { appData.subjectClasses.push(newConfig); appData.subjectClasses.sort((a,b) => a.name.localeCompare(b.name)); } appData.homeroomClasses = appData.homeroomClasses.filter(c => c.url !== url); if (isHomeroom) { appData.homeroomClasses.push(newConfig); appData.homeroomClasses.sort((a,b) => a.name.localeCompare(b.name)); } document.getElementById('config-modal').classList.add('hidden'); const btn = document.getElementById('btn-save-cfg'); const orgText = btn.innerHTML; btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i>'; btn.disabled = true; google.script.run.withSuccessHandler(res => { btn.innerHTML = orgText; btn.disabled = false; renderSettingsView(); if(typeof renderDashboardPicker === 'function') renderDashboardPicker(); showToast("成功", "連結設定已儲存", "success",1000); }).apiSaveAllData(appData.subjectClasses, appData.homeroomClasses, appData.pendingFiles); }
+    function delConf(name, role) { if(!confirm("確定刪除此設定？")) return; if(role === 'subject') appData.subjectClasses = appData.subjectClasses.filter(c => c.name !== name); else appData.homeroomClasses = appData.homeroomClasses.filter(c => c.name !== name); google.script.run.withSuccessHandler(() => { renderSettingsView(); if(typeof renderDashboardPicker === 'function') renderDashboardPicker(); }).apiSaveAllData(appData.subjectClasses, appData.homeroomClasses, appData.pendingFiles); }
+    function openBatchConfigModal() { document.getElementById('batch-config-modal').classList.remove('hidden'); const tbody = document.getElementById('batch-config-tbody'); tbody.innerHTML = '<tr><td colspan="7" class="text-center py-10 text-slate-400"><i class="fa-solid fa-spinner fa-spin mr-2"></i>正在同步待處理項目...</td></tr>'; google.script.run.withSuccessHandler(pendingFiles => { appData.pendingFiles = pendingFiles || []; renderSettingsView(); renderBatchRows(); }).apiGetPendingFiles(); }
+    function renderBatchRows() { const tbody = document.getElementById('batch-config-tbody'); tbody.innerHTML = ""; const allItems = [...appData.pendingFiles.map(f => ({...f, origin: 'pending', role: appData.mode, days: 7, cc: '', targets: []})), ...appData.subjectClasses.map(c => ({...c, origin: 'subject', role: 'subject'})), ...appData.homeroomClasses.map(c => ({...c, origin: 'homeroom', role: 'homeroom'}))]; if (allItems.length === 0) { tbody.innerHTML = '<tr><td colspan="7" class="text-center py-8 text-slate-400 text-xs">目前沒有任何設定資料</td></tr>'; return; } allItems.forEach((c, idx) => { const tr = document.createElement('tr'); tr.className = c.origin === 'pending' ? "bg-amber-50" : "hover:bg-slate-50"; const rawName = c.name || c.title || ""; let displayName = rawName; if(c.origin === 'pending') { const match = rawName.match(/(\d+)$/); if(match) displayName = match[1]; } const isSub = (c.origin === 'subject') || (c.origin === 'pending' && c.role === 'subject'); const isHome = (c.origin === 'homeroom') || (c.origin === 'pending' && c.role === 'homeroom'); tr.innerHTML = `<td class="p-3 text-slate-400 text-center text-xs">${idx + 1}</td><td class="p-3 text-xs text-slate-500">${c.origin === 'pending' ? '待處理' : (c.origin==='subject'?'任課':'導師')}</td><td class="p-3"><div class="flex gap-2 items-center"><label><input type="checkbox" class="batch-role-s w-4 h-4 text-blue-600 rounded" ${isSub?'checked':''}> <span class="text-blue-700 font-bold text-xs">任課</span></label><label><input type="checkbox" class="batch-role-h w-4 h-4 text-purple-600 rounded" ${isHome?'checked':''}> <span class="text-purple-700 font-bold text-xs">導師</span></label></div></td><td class="p-3"><input class="cfg-name border border-slate-300 rounded px-2 py-1 w-full font-bold text-slate-700" value="${displayName}"><input type="hidden" class="cfg-url" value="${c.url}"></td><td class="p-3"><input type="number" class="cfg-days w-16 border rounded p-1 text-center" value="${c.days}"></td><td class="p-3"><input type="text" class="cfg-cc w-full border rounded p-1 text-xs" value="${c.cc || ''}"></td><td class="p-3"><div class="tag-container" onclick="focusTagInput(this)"><input type="text" class="tag-input" placeholder="輸入..." onkeydown="handleTagKey(event)"></div></td>`; tbody.appendChild(tr); const container = tr.querySelector('.tag-container'); if (c.targets) c.targets.forEach(t => addTag(container, t)); }); }
+    function saveBatchConfigs() { const rows = document.querySelectorAll('#batch-config-tbody tr'); let newSubjectList = [], newHomeroomList = []; rows.forEach(tr => { const nameInput = tr.querySelector('.cfg-name'); if (!nameInput) return; const name = nameInput.value.trim(); if(!name) return; const isSub = tr.querySelector('.batch-role-s').checked; const isHome = tr.querySelector('.batch-role-h').checked; const url = tr.querySelector('.cfg-url').value; const days = tr.querySelector('.cfg-days').value; const cc = tr.querySelector('.cfg-cc').value; const targets = Array.from(tr.querySelectorAll('.tag-chip')).map(chip => chip.dataset.val); const item = { name, url, days, cc, targets }; if(isSub) newSubjectList.push(item); if(isHome) newHomeroomList.push(item); }); const btn = document.getElementById('btn-save-batch-cfg'); const orgHtml = btn.innerHTML; btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin mr-2"></i>儲存中...'; btn.disabled = true; google.script.run.withSuccessHandler(res => { btn.innerHTML = orgHtml; btn.disabled = false; document.getElementById('batch-config-modal').classList.add('hidden'); appData.subjectClasses = newSubjectList; appData.homeroomClasses = newHomeroomList; appData.pendingFiles = []; renderSettingsView(); if(typeof renderDashboardPicker === 'function') renderDashboardPicker(); showToast("成功", "已更新資料庫", "success", 1000); }).apiSaveAllData(newSubjectList, newHomeroomList, []); }
+    function renderSyncSelector(data) { const container = document.getElementById('sync-selector-body'); container.innerHTML = ''; if (!data || data.length === 0) { container.innerHTML = ` <div class="flex flex-col items-center justify-center py-12 text-slate-400"> <i class="fa-solid fa-box-open text-4xl mb-3"></i> <p>沒有找到可同步的導師連結</p> <p class="text-xs mt-1">請先至「連結管理中心」加入導師科目連結</p> </div>`; return; } data.forEach(item => { const div = document.createElement('div'); div.className = "bg-white border border-slate-200 rounded-xl p-4 shadow-sm mb-4"; let checkboxes = ''; if (item.allSheets && item.allSheets.length > 0) { item.allSheets.forEach(sheet => {  const isChecked = 'checked'; checkboxes += ` <label class="flex items-center space-x-2 text-sm cursor-pointer hover:bg-blue-50 p-2 rounded transition-colors border border-transparent hover:border-blue-100"> <input type="checkbox" value="${sheet}" class="sync-chk w-4 h-4 text-blue-600 rounded focus:ring-blue-500" ${isChecked}> <span class="text-slate-700 font-medium">${sheet}</span> </label>`; }); } else { checkboxes = '<div class="col-span-full text-xs text-amber-500 bg-amber-50 p-2 rounded"><i class="fa-solid fa-triangle-exclamation mr-1"></i>無法讀取分頁，請檢查連結</div>'; } div.innerHTML = ` <div class="flex justify-between items-start mb-3 border-b border-slate-100 pb-2" data-subject="${item.name}"> <div class="flex items-center gap-2"> <div class="w-8 h-8 rounded-lg bg-indigo-100 text-indigo-600 flex items-center justify-center"><i class="fa-solid fa-book"></i></div> <div> <h4 class="font-bold text-slate-700">${item.name}</h4> <div class="text-[10px] text-slate-400 font-mono truncate max-w-[200px]">${item.url}</div> </div> </div> </div> <div class="grid grid-cols-2 md:grid-cols-3 gap-2"> ${checkboxes} </div> `; container.appendChild(div); }); }
+    function confirmSyncExecution() { const dbUrl = document.getElementById('db-url').value.trim(); const cards = document.querySelectorAll('#sync-selector-body > div'); let selectionMap = {}; cards.forEach(card => { const subject = card.querySelector('h4').dataset.subject; const checked = Array.from(card.querySelectorAll('.sync-chk:checked')).map(c => c.value); selectionMap[subject] = checked; }); const btn = document.getElementById('btn-confirm-sync'); const originalHtml = btn.innerHTML; btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin mr-2"></i>正在同步資料庫...'; btn.disabled = true; showToast("處理中", "正在背景執行同步，請稍候...", "info", 8000); google.script.run.withSuccessHandler(() => { google.script.run.withSuccessHandler(res => { btn.innerHTML = originalHtml; btn.disabled = false; document.getElementById('sync-selector-modal').classList.add('hidden'); if(res.success) { showToast("同步成功", `已更新 ${res.count} 筆學生資料`, "success"); const masterStatus = document.getElementById('master-status'); if(masterStatus) { masterStatus.innerHTML = `最後更新：<span class="text-green-600 font-bold">${new Date().toLocaleTimeString()} (剛同步)</span>`; masterStatus.classList.add('animate-pulse'); } } else { showToast("同步失敗", res.msg, "error"); document.getElementById('sync-selector-modal').classList.remove('hidden'); } }).apiSyncToDatabase(dbUrl); }).apiSaveHomeroomSyncSettings(selectionMap); }
+    function openDbConfigModal() { document.getElementById('db-config-modal').classList.remove('hidden'); if(typeof loadDbConfig === 'function') loadDbConfig(); }
+    window.loadDbConfig = function() { google.script.run.withSuccessHandler(url => { if(url) document.getElementById('db-url').value = url; }).apiGetDbUrl(); }; // 修復同步按鈕的 withFailureHandler 
+    function syncToDatabase() { const url = document.getElementById('db-url').value.trim(); if(!url) return showToast("錯誤", "請輸入資料庫網址", "error"); const btn = document.getElementById('btn-db-sync'); const orgHtml = btn.innerHTML; btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin mr-2"></i> 讀取設定...'; btn.disabled = true;  google.script.run.withSuccessHandler(data => { btn.innerHTML = orgHtml; btn.disabled = false; document.getElementById('db-config-modal').classList.add('hidden'); document.getElementById('sync-selector-modal').classList.remove('hidden'); renderSyncSelector(data); }).withFailureHandler(err => { btn.innerHTML = orgHtml; btn.disabled = false; showToast("錯誤", "讀取失敗：" + err, "error"); }).apiGetHomeroomSyncData(); }
+
+    // JS_System
+    function renderSystemView() { checkSaltStatus(); }
+    function checkSaltStatus() { const msg = document.getElementById('salt-status-msg'); google.script.run.withSuccessHandler(res => { msg.innerText = res.isSet ? "已設定 (可覆蓋)" : "尚未設定"; msg.className = res.isSet ? "text-xs font-bold text-green-500" : "text-xs font-bold text-red-500"; if(res.isSet) document.getElementById('inp-sys-salt').value = sessionStorage.getItem('SYSTEM_SALT'); }).apiCheckSaltStatus(); }
+    function saveSystemSalt() { const val = document.getElementById('inp-sys-salt').value.trim(); if(!val) return showToast("錯誤", "請輸入內容", "error"); google.script.run.withSuccessHandler(() => { showToast("成功", "金鑰已儲存", "success"); checkSaltStatus(); }).apiSaveSystemSalt(val); }
+    function copyConfigForPortal() { const btn = document.getElementById('btn-copy-config'); const orgHtml = btn.innerHTML; btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin mr-2"></i>讀取中...'; btn.disabled = true; google.script.run.withSuccessHandler(res => { if (res.success) { navigator.clipboard.writeText(res.text).then(() => { btn.innerHTML = '<i class="fa-solid fa-check mr-2"></i>已複製設定資訊'; setTimeout(() => { btn.innerHTML = orgHtml; btn.disabled = false; }, 2000); }); } else { alert(res.msg); btn.innerHTML = orgHtml; btn.disabled = false; } }).apiGetConfigForCopy(); }
+    function doArchive() { if(!confirm("確定封存？")) return; google.script.run.withSuccessHandler(() => showToast("成功", "已封存", "success")).apiArchiveDatabase(); }
+    function doResetAuth() { if(!confirm("確定清空所有資料？(重置)")) return; google.script.run.withSuccessHandler(() => { alert("系統已重置，將重新整理頁面"); location.reload(); }).apiResetAuthDatabase(); }
+    function sendPreviewSummary() { const btn = document.getElementById('btn-test-preview'); const orgHtml = btn.innerHTML; btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin mr-2"></i> 系統掃描中...'; btn.disabled = true; btn.classList.add('bg-slate-100', 'text-slate-400'); setTimeout(() => { btn.innerHTML = '<i class="fa-solid fa-check mr-2"></i> 已發送'; setTimeout(() => { btn.innerHTML = orgHtml; btn.disabled = false; btn.classList.remove('bg-slate-100', 'text-slate-400'); }, 3000); showToast("完成", "預覽信已寄出", "success",1000); }, 1500); }
+    function sendTestEmail() { const email = document.getElementById('inp-test-email').value.trim(); if(!email) return showToast("錯誤", "請輸入 Email", "error"); const btn = document.getElementById('btn-test-mail'); btn.innerText = "發送中..."; google.script.run.withSuccessHandler(() => { btn.innerText = "發送測試信"; showToast("成功", "測試信已發送", "success"); }).apiSendTestEmail(email); }
+    function changeDefaultFolder() { const newId = prompt("【模擬】請輸入 Google Drive 資料夾 ID：", sessionStorage.getItem('DEFAULT_FOLDER_ID') || ""); if (newId !== null) { google.script.run.withSuccessHandler(res => { document.getElementById('current-folder-display').innerText = res.folderName; alert("預設資料夾已更新"); }).apiSaveStorageFolder(newId); } } 
+    function resetSingleForm() { document.getElementById('inp-single-title').value = ''; document.getElementById('inp-single-sheets').value = '第一次段考, 第二次段考, 平時成績'; document.getElementById('inp-single-ta').value = ''; document.getElementById('inp-single-students').value = ''; document.getElementById('chk-single-public').checked = false; }
+
+    // Init
+    initCreator();
+  </script>
+</body>
+</html>

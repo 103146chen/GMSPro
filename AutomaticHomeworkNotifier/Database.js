@@ -14,7 +14,7 @@ function apiSyncToDatabase(dbUrl) {
 
     if (!dbUrl) return { success: false, msg: "尚未設定資料庫連結" };
 
-    const result = apiFetchHomeroomMasterData();
+    const result = apiFetchHomeroomMasterData_();
     if (!result.success) throw new Error("無法讀取成績資料");
     
     // [去重邏輯] 確保同一位學生、同一門課、同一個作業只有一筆資料
@@ -186,7 +186,7 @@ function apiSaveHomeroomSyncSettings(selectionMap) {
   return { success: true };
 }
 
-function apiFetchHomeroomMasterData() {
+function apiFetchHomeroomMasterData_() {
   const homeroomList = getListByMode('homeroom');
   let masterList = [];
   let log = [];

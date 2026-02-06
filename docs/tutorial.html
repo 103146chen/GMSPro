@@ -14,7 +14,7 @@
                 extend: {
                     fontFamily: { sans: ['Inter', 'Noto Sans TC', 'sans-serif'] },
                     colors: {
-                        brand: { blue: '#2563EB', purple: '#9333EA', dark: '#0F172A' }
+                        brand: { blue: '#2563EB', purple: '#9333EA', dark: '#020617' } // Slate-950
                     }
                 }
             }
@@ -22,472 +22,325 @@
     </script>
     <style>
         /* 核心佈局 */
-        body { overflow: hidden; }
+        body { overflow: hidden; background-color: #020617; color: white; }
         .no-scrollbar::-webkit-scrollbar { display: none; }
         
         /* 面板切換動畫 */
         .step-panel { display: none; height: 100%; width: 100%; }
-        .step-panel.active { display: flex; animation: fadeIn 0.3s ease-out; }
-        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+        .step-panel.active { display: flex; animation: fadeIn 0.4s cubic-bezier(0.4, 0, 0.2, 1); }
+        @keyframes fadeIn { from { opacity: 0; transform: scale(0.98); } to { opacity: 1; transform: scale(1); } }
 
-        /* 左側選單樣式 */
-        .nav-group-header { cursor: pointer; transition: all 0.2s; }
-        .nav-group-header:hover { background-color: #F8FAFC; }
-        .nav-group-header.active { background-color: #EFF6FF; border-right: 3px solid #2563EB; }
+        /* 左側選單樣式 (Dark Mode) */
+        .nav-group-header { cursor: pointer; transition: all 0.2s; border-left: 3px solid transparent; }
+        .nav-group-header:hover { background-color: rgba(255,255,255,0.05); }
+        .nav-group-header.active { background-color: rgba(37, 99, 235, 0.1); border-left-color: #2563EB; }
+        .nav-group-header.active .step-num { background-color: #2563EB; color: white; }
         
         /* 子步驟清單動畫 */
         .nav-sub-list { 
             max-height: 0; overflow: hidden; transition: max-height 0.3s ease-in-out; 
+            background-color: rgba(0,0,0,0.2);
         }
         .nav-sub-list.open { max-height: 1000px; }
 
         /* 子步驟項目 */
         .sub-item { 
-            padding-left: 3.5rem; border-left: 2px solid #E2E8F0; 
+            padding-left: 3.5rem; border-left: 1px solid rgba(255,255,255,0.1); 
             cursor: pointer; position: relative; transition: all 0.2s;
-            color: #64748B; font-size: 0.85rem;
+            color: #94a3b8; font-size: 0.85rem;
         }
-        .sub-item:hover { color: #334155; }
+        .sub-item:hover { color: #e2e8f0; background-color: rgba(255,255,255,0.03); }
         .sub-item.active { 
-            color: #2563EB; font-weight: bold; border-left-color: #2563EB; background: #F8FAFC;
+            color: #60a5fa; font-weight: bold; border-left-color: #60a5fa; background: rgba(37, 99, 235, 0.1);
         }
         .sub-item.active::before {
-            content: ''; position: absolute; left: -5px; top: 50%; transform: translateY(-50%);
-            width: 8px; height: 8px; background: #2563EB; border-radius: 50%;
+            content: ''; position: absolute; left: -4px; top: 50%; transform: translateY(-50%);
+            width: 7px; height: 7px; background: #60a5fa; border-radius: 50%;
+            box-shadow: 0 0 10px #60a5fa;
         }
+
+        /* 瀏覽器視窗框 (一致性設計) */
+        .browser-window {
+            background: #1e293b;
+            border-radius: 0.5rem;
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            overflow: hidden;
+            display: flex; flex-direction: column;
+            max-width: 100%; max-height: 100%;
+        }
+        .browser-header {
+            height: 1.5rem;
+            background: #0f172a;
+            display: flex;
+            align-items: center;
+            padding-left: 0.75rem;
+            gap: 0.35rem;
+            border-bottom: 1px solid rgba(255,255,255,0.05);
+            flex: none;
+        }
+        .dot { width: 0.5rem; height: 0.5rem; border-radius: 9999px; }
 
         /* 點擊感應區 */
         .click-zone {
-            position: absolute; top: 0; bottom: 0; width: 40%; z-index: 20; cursor: pointer;
+            position: absolute; top: 0; bottom: 0; width: 15%; z-index: 20; cursor: pointer;
             display: flex; align-items: center; opacity: 0; transition: opacity 0.2s;
         }
         .click-zone:hover { opacity: 1; }
-        .click-zone.prev { left: 0; justify-content: flex-start; padding-left: 20px; background: linear-gradient(to right, rgba(0,0,0,0.05), transparent); }
-        .click-zone.next { right: 0; justify-content: flex-end; padding-right: 20px; background: linear-gradient(to left, rgba(0,0,0,0.05), transparent); }
+        .click-zone.prev { left: 0; justify-content: flex-start; padding-left: 20px; background: linear-gradient(to right, rgba(0,0,0,0.5), transparent); }
+        .click-zone.next { right: 0; justify-content: flex-end; padding-right: 20px; background: linear-gradient(to left, rgba(0,0,0,0.5), transparent); }
     </style>
 </head>
-<body class="bg-slate-50 text-slate-800 antialiased h-screen flex flex-col">
+<body class="bg-slate-950 text-white antialiased h-screen flex flex-col">
 
-    <nav class="bg-white border-b border-slate-200 z-50 flex-none h-14 shadow-sm">
-        <div class="w-full px-4 h-full flex justify-between items-center">
-            <div class="flex items-center gap-3">
-                <a href="index.html" class="text-slate-500 hover:text-blue-600 transition flex items-center gap-1 text-sm font-bold border-r border-slate-200 pr-4">
-                    <i class="fa-solid fa-arrow-left"></i> 首頁
-                </a>
-                <div class="bg-brand-blue text-white w-8 h-8 rounded-lg flex items-center justify-center font-bold text-lg">G</div>
-                <span class="font-bold text-base tracking-tight text-slate-800 hidden md:block">GMSPro Deployment</span>
-            </div>
-            <div class="flex gap-3 text-sm font-medium text-slate-500">
-                <span class="hidden md:inline text-xs bg-slate-100 px-2 py-1 rounded">
-                    鍵盤操控：<kbd>←</kbd> 上一張 / <kbd>→</kbd> 下一張
-                </span>
-                <a href="https://github.com/103146chen/GMSPro" target="_blank" class="hover:text-slate-900 flex items-center gap-2 ml-4">
-                    <i class="fa-brands fa-github"></i> GitHub
-                </a>
+    <nav class="fixed top-0 w-full z-50 text-white/90 transition-all duration-300 bg-slate-950/50 backdrop-blur-md border-b border-white/5 h-16 flex-none">
+        <div class="w-full px-6 h-full flex justify-between items-center">
+            <a href="index.html" class="flex items-center gap-2 group hover:text-white transition">
+                <div class="bg-blue-600 text-white w-8 h-8 rounded flex items-center justify-center font-bold text-lg shadow-lg shadow-blue-500/30">G</div>
+                <span class="font-bold text-lg tracking-tight">GMSPro</span>
+            </a>
+            <div class="hidden md:flex items-center gap-8 text-sm font-medium text-slate-400">
+                <a href="index.html" class="hover:text-blue-400 transition">首頁</a>
+                <a href="features.html" class="hover:text-blue-400 transition">功能解析</a>
+                <a href="usage.html" class="hover:text-blue-400 transition">操作手冊</a>
+                <a href="tutorial.html" class="text-white font-bold border-b border-blue-500 pb-0.5">部署教學</a>
+                <a href="https://github.com/103146chen/GMSPro" target="_blank" class="hover:text-white transition"><i class="fa-brands fa-github text-lg"></i></a>
             </div>
         </div>
     </nav>
 
-    <div class="flex-1 flex overflow-hidden w-full">
-        
-        <aside class="w-72 bg-white border-r border-slate-200 flex flex-col z-10 shadow-lg flex-none hidden md:flex">
-            <div class="p-4 border-b border-slate-100">
-                <button onclick="jumpToVideo()" id="nav-video" class="w-full text-left px-3 py-2 rounded-lg flex items-center gap-3 hover:bg-red-50 transition group border border-transparent hover:border-red-100">
-                    <div class="bg-red-100 text-red-600 w-8 h-8 rounded-full flex items-center justify-center group-hover:scale-110 transition">
+    <div class="flex-1 flex overflow-hidden w-full pt-16">
+        <aside class="w-72 bg-slate-900/50 backdrop-blur border-r border-white/5 flex flex-col z-10 shadow-2xl flex-none hidden md:flex">
+            <div class="p-4 border-b border-white/5">
+                <button onclick="jumpToVideo()" id="nav-video" class="w-full text-left px-3 py-2 rounded-lg flex items-center gap-3 hover:bg-red-500/10 transition group border border-transparent hover:border-red-500/20">
+                    <div class="bg-red-500/20 text-red-500 w-8 h-8 rounded-full flex items-center justify-center group-hover:scale-110 transition shadow-lg shadow-red-900/20">
                         <i class="fa-solid fa-play text-xs"></i>
                     </div>
                     <div>
-                        <span class="block font-bold text-sm text-slate-700 group-hover:text-red-700">教學影片</span>
-                        <span class="text-[10px] text-slate-400">Video Tutorial</span>
+                        <span class="block font-bold text-sm text-slate-200 group-hover:text-white">教學影片</span>
+                        <span class="text-[10px] text-slate-500">Video Tutorial</span>
                     </div>
                 </button>
             </div>
 
-            <div id="sidebar-tree" class="flex-1 overflow-y-auto no-scrollbar py-2">
-                </div>
+            <div id="sidebar-tree" class="flex-1 overflow-y-auto no-scrollbar py-2"></div>
             
-            <div class="p-4 border-t border-slate-100 bg-slate-50">
+            <div class="p-4 border-t border-white/5 bg-slate-900/50">
                 <a href="https://drive.google.com/drive/folders/1DcL7BAPT9ZesQbCIf2cYCUPsL65fen7u?usp=sharing" target="_blank" 
-                   class="block w-full bg-slate-800 hover:bg-brand-blue text-white text-center py-2.5 rounded-lg font-bold text-xs transition shadow flex items-center justify-center gap-2">
-                    <i class="fa-brands fa-google-drive"></i> 開啟雲端硬碟
+                   class="block w-full bg-blue-600 hover:bg-blue-500 text-white text-center py-2.5 rounded-lg font-bold text-xs transition shadow-lg shadow-blue-900/20 flex items-center justify-center gap-2 group">
+                    <i class="fa-brands fa-google-drive group-hover:scale-110 transition"></i> 開啟雲端硬碟
                 </a>
             </div>
         </aside>
 
-        <main class="flex-1 bg-slate-900 h-full relative overflow-hidden flex flex-col">
-            
+        <main class="flex-1 bg-slate-950 h-full relative overflow-hidden flex flex-col">
             <div id="panel-video" class="step-panel w-full h-full bg-black relative flex flex-col">
                 <div class="flex-1 relative">
-                    <iframe class="w-full h-full absolute inset-0" src="https://www.youtube.com/embed/您的影片ID?rel=0" frameborder="0" allowfullscreen></iframe>
+                    <iframe class="w-full h-full absolute inset-0" src="https://www.youtube.com/embed/您的影片ID?rel=0&modestbranding=1" frameborder="0" allowfullscreen></iframe>
                 </div>
-                <div class="h-16 bg-slate-900 flex items-center justify-end px-6 border-t border-slate-800 flex-none">
-                    <button onclick="jumpToStep(1, 0)" class="bg-brand-blue text-white px-5 py-2 rounded-full font-bold text-sm shadow-lg hover:bg-blue-600 transition flex items-center gap-2">
+                <div class="h-16 bg-slate-900 flex items-center justify-end px-6 border-t border-white/10 flex-none">
+                    <button onclick="jumpToStep(1, 0)" class="bg-blue-600 text-white px-6 py-2 rounded-full font-bold text-sm shadow-lg shadow-blue-900/50 hover:bg-blue-500 transition flex items-center gap-2 hover:scale-105 transform duration-200">
                         開始操作 Step 1 <i class="fa-solid fa-arrow-right"></i>
                     </button>
                 </div>
             </div>
 
-            <div id="panel-gallery" class="step-panel hidden w-full h-full flex-col lg:flex-row bg-slate-100">
-                
-                <div class="flex-1 relative bg-slate-200 overflow-hidden flex items-center justify-center group select-none">
-                    
-                    <div id="img-container" class="w-full h-full p-4 md:p-8 flex items-center justify-center">
-                        <img id="active-image" src="" class="max-w-full max-h-full object-contain shadow-2xl rounded-lg bg-white transition-transform duration-300" alt="Tutorial Step">
+            <div id="panel-gallery" class="step-panel hidden w-full h-full flex-col lg:flex-row bg-slate-950">
+                <div class="flex-1 relative bg-[url('https://grainy-gradients.vercel.app/noise.svg')] bg-slate-950 overflow-hidden flex items-center justify-center group select-none p-4 md:p-8">
+                    <div class="browser-window shadow-2xl shadow-black max-w-5xl transition-transform duration-300 transform" id="img-wrapper">
+                        <div class="browser-header">
+                            <div class="dot bg-red-500"></div><div class="dot bg-yellow-500"></div><div class="dot bg-green-500"></div>
+                            <span id="browser-title" class="ml-3 text-[10px] text-slate-500 font-mono truncate">script.google.com</span>
+                        </div>
+                        <div class="bg-slate-900 flex-1 flex items-center justify-center overflow-hidden relative">
+                             <img id="active-image" src="" class="max-w-full max-h-full object-contain" alt="Tutorial Step">
+                             <div id="img-loader" class="absolute inset-0 flex items-center justify-center bg-slate-900 z-10">
+                                 <i class="fa-solid fa-circle-notch fa-spin text-blue-500 text-2xl"></i>
+                             </div>
+                        </div>
                     </div>
-
                     <div class="click-zone prev group/prev" onclick="prevSlide()">
-                        <div class="bg-white/80 text-slate-600 w-12 h-12 rounded-full flex items-center justify-center backdrop-blur shadow-lg group-hover/prev:scale-110 transition">
+                        <div class="bg-slate-800/80 text-white w-12 h-12 rounded-full flex items-center justify-center backdrop-blur shadow-lg border border-white/10 group-hover/prev:scale-110 transition">
                             <i class="fa-solid fa-chevron-left text-lg"></i>
                         </div>
                     </div>
                     <div class="click-zone next group/next" onclick="nextSlide()">
-                        <div class="bg-white/80 text-slate-600 w-12 h-12 rounded-full flex items-center justify-center backdrop-blur shadow-lg group-hover/next:scale-110 transition">
+                        <div class="bg-slate-800/80 text-white w-12 h-12 rounded-full flex items-center justify-center backdrop-blur shadow-lg border border-white/10 group-hover/next:scale-110 transition">
                             <i class="fa-solid fa-chevron-right text-lg"></i>
                         </div>
                     </div>
                 </div>
 
-                <div class="w-full lg:w-96 bg-white border-l border-slate-200 flex flex-col shadow-2xl z-20">
-                    <div class="p-6 border-b border-slate-100 bg-slate-50 flex-none">
-                        <div class="flex justify-between items-start mb-2">
-                            <span id="info-badge" class="text-xs font-bold text-blue-600 uppercase tracking-widest bg-blue-100 px-2 py-1 rounded">Step 01</span>
-                            <span id="info-counter" class="text-xs font-mono text-slate-400">1/3</span>
+                <div class="w-full lg:w-96 bg-slate-900 border-l border-white/5 flex flex-col shadow-2xl z-20">
+                    <div class="p-6 border-b border-white/5 bg-slate-800/30 flex-none">
+                        <div class="flex justify-between items-start mb-3">
+                            <span id="info-badge" class="text-[10px] font-bold text-blue-400 uppercase tracking-widest bg-blue-500/10 border border-blue-500/20 px-2 py-1 rounded">Step 01</span>
+                            <span id="info-counter" class="text-xs font-mono text-slate-500">1/3</span>
                         </div>
-                        <h2 id="info-step-title" class="text-xl font-extrabold text-slate-800 leading-tight">建立檔案副本</h2>
-                        
-                        <div id="deploy-switcher" class="hidden mt-4 bg-slate-200 p-1 rounded-lg flex">
-                            <button onclick="setDeployType('gf')" id="btn-gf" class="flex-1 py-1.5 text-xs font-bold rounded bg-white text-blue-700 shadow-sm transition">GradeFlow</button>
-                            <button onclick="setDeployType('nt')" id="btn-nt" class="flex-1 py-1.5 text-xs font-bold rounded text-slate-500 hover:text-slate-700 transition">Notifier</button>
+                        <h2 id="info-step-title" class="text-xl font-bold text-white leading-tight">建立檔案副本</h2>
+                        <div id="deploy-switcher" class="hidden mt-4 bg-slate-950 p-1 rounded-lg flex border border-white/5">
+                            <button onclick="setDeployType('gf')" id="btn-gf" class="flex-1 py-1.5 text-xs font-bold rounded bg-slate-800 text-blue-400 shadow transition">GradeFlow</button>
+                            <button onclick="setDeployType('nt')" id="btn-nt" class="flex-1 py-1.5 text-xs font-bold rounded text-slate-500 hover:text-slate-300 transition">Notifier</button>
                         </div>
                     </div>
-
                     <div class="flex-1 p-6 overflow-y-auto">
-                        <h3 id="info-img-title" class="text-lg font-bold text-slate-800 mb-4 flex items-center gap-2">
-                            Title Placeholder
-                        </h3>
-                        <div id="info-desc" class="text-slate-600 text-sm leading-relaxed whitespace-pre-line">
-                            Description Placeholder...
-                        </div>
-                        
-                        <div id="info-tip" class="mt-6 bg-amber-50 border border-amber-100 p-4 rounded-lg hidden">
-                            <p class="text-xs text-amber-800 flex gap-2 items-start">
-                                <i class="fa-solid fa-lightbulb mt-0.5 text-amber-500"></i>
+                        <h3 id="info-img-title" class="text-lg font-bold text-slate-200 mb-4 flex items-center gap-2">Title Placeholder</h3>
+                        <div id="info-desc" class="text-slate-400 text-sm leading-relaxed whitespace-pre-line">Description Placeholder...</div>
+                        <div id="info-tip" class="mt-6 bg-yellow-500/10 border border-yellow-500/20 p-4 rounded-lg hidden">
+                            <p class="text-xs text-yellow-200/80 flex gap-2 items-start">
+                                <i class="fa-solid fa-lightbulb mt-0.5 text-yellow-400"></i>
                                 <span id="info-tip-text">Tip content</span>
                             </p>
                         </div>
                     </div>
-
-                    <div class="p-4 border-t border-slate-100 bg-slate-50 flex justify-between items-center flex-none">
-                        <button onclick="prevSlide()" class="text-slate-400 hover:text-slate-700 font-bold text-sm px-4 py-2 flex items-center gap-2">
-                            <i class="fa-solid fa-arrow-left"></i> 上一步
-                        </button>
-                        <button onclick="nextSlide()" class="bg-slate-900 text-white px-6 py-2 rounded-full font-bold text-sm hover:bg-brand-blue transition shadow-lg flex items-center gap-2">
-                            下一步 <i class="fa-solid fa-arrow-right"></i>
-                        </button>
+                    <div class="p-4 border-t border-white/5 bg-slate-900 flex justify-between items-center flex-none">
+                        <button onclick="prevSlide()" class="text-slate-500 hover:text-white font-bold text-sm px-4 py-2 flex items-center gap-2 transition"><i class="fa-solid fa-arrow-left"></i> 上一步</button>
+                        <button onclick="nextSlide()" class="bg-white text-slate-900 px-6 py-2 rounded-full font-bold text-sm hover:bg-blue-50 transition shadow-lg flex items-center gap-2">下一步 <i class="fa-solid fa-arrow-right"></i></button>
                     </div>
                 </div>
             </div>
-
         </main>
     </div>
 
     <script>
-        // --- 1. DATA CONFIGURATION ---
         const stepsConfig = [
-            {
-                id: 1,
-                title: "建立檔案副本",
-                icon: "fa-regular fa-copy",
-                images: [
-                    { src: "01.png", title: "進入 Google Drive", desc: "點擊連結進入公開資料夾。\n此時檔案是「唯讀」的，您無法編輯。", tip: "" },
-                    { src: "02.png", title: "右鍵選單", desc: "在檔案上點擊「滑鼠右鍵」。\n選擇「建立副本 (Make a copy)」。", tip: "請勿直接雙擊開啟，那只是預覽模式。" },
-                    { src: "03.png", title: "開啟新檔案", desc: "系統建立副本後，請回到您的雲端硬碟根目錄。\n找到並開啟剛剛建立的新檔案。", tip: "" }
-                ]
-            },
-            {
-                id: 2,
-                title: "部署網頁",
-                icon: "fa-solid fa-rocket",
-                images: [
-                    { src: "04.png", title: "開啟 Apps Script", desc: "開啟檔案後，您會看到程式碼編輯器。", tip: "" },
-                    { src: "05.png", title: "點擊部署", desc: "點擊右上角的藍色「部署 (Deploy)」按鈕。", tip: "" },
-                    { src: "06.png", title: "新增部署", desc: "選擇「新增部署作業 (New deployment)」。", tip: "" },
-                    { 
-                        src: "07-GradeFlow.png", // Dynamic
-                        dynamic: true,
-                        title: "設定權限 (重要)", 
-                        desc: "請依照專案類型設定權限。", 
-                        tip: "GradeFlow 務必設為 Anyone，家長才能看到。" 
-                    },
-                    { src: "08.png", title: "確認部署", desc: "設定完成後，點擊「部署」。", tip: "" }
-                ]
-            },
-            {
-                id: 3,
-                title: "授予存取權",
-                icon: "fa-solid fa-key",
-                images: [
-                    { src: "09.png", title: "開始授權", desc: "點擊「授予存取權 (Authorize access)」。", tip: "" },
-                    { src: "10.png", title: "選擇帳號", desc: "選擇您的 Google 帳號。", tip: "" },
-                    { src: "11.png", title: "進階設定", desc: "看到紅色警告是正常的。\n點擊左下角「Advanced (進階)」。", tip: "這是 Google 的標準安全機制。" },
-                    { src: "12.png", title: "前往應用程式", desc: "點擊下方的「Go to ... (unsafe)」。", tip: "" },
-                    { src: "13.png", title: "允許權限", desc: "點擊「Allow (允許)」。", tip: "" },
-                    { src: "14.png", title: "複製網址", desc: "複製畫面上的「網頁應用程式網址」。", tip: "" },
-                    { src: "15.png", title: "完成", desc: "點擊完成關閉視窗。", tip: "" }
-                ]
-            },
-            {
-                id: 4,
-                title: "自動排程 (Notifier)",
-                icon: "fa-regular fa-clock",
-                images: [
-                    { src: "16.png", title: "開啟觸發條件", desc: "點擊左側的鬧鐘圖示 (觸發條件)。", tip: "" },
-                    { src: "17.png", title: "新增觸發", desc: "點擊右下角藍色按鈕「新增觸發條件」。", tip: "" },
-                    { src: "18.png", title: "選擇函式", desc: "函式選擇 `triggerDailyAutomation`。", tip: "選錯函式機器人不會動喔！" },
-                    { src: "19.png", title: "確認函式", desc: "再次確認是 `triggerDailyAutomation`。", tip: "" },
-                    { src: "20.png", title: "活動來源", desc: "選擇「時間驅動 (Time-driven)」。", tip: "" },
-                    { src: "21.png", title: "設定頻率", desc: "選擇「每日計時器」，時間建議設在放學後。", tip: "" },
-                    { src: "22.png", title: "儲存", desc: "點擊儲存，完成設定！", tip: "" }
-                ]
-            }
+            { id: 1, title: "建立檔案副本", icon: "fa-regular fa-copy", images: [ { src: "01.png", title: "進入 Google Drive", desc: "點擊連結進入公開資料夾。\n此時檔案是「唯讀」的，您無法編輯。", tip: "" }, { src: "02.png", title: "右鍵選單", desc: "在檔案上點擊「滑鼠右鍵」。\n選擇「建立副本 (Make a copy)」。", tip: "請勿直接雙擊開啟，那只是預覽模式。" }, { src: "03.png", title: "開啟新檔案", desc: "系統建立副本後，請回到您的雲端硬碟根目錄。\n找到並開啟剛剛建立的新檔案。", tip: "" } ] },
+            { id: 2, title: "部署網頁", icon: "fa-solid fa-rocket", images: [ { src: "04.png", title: "開啟 Apps Script", desc: "開啟檔案後，您會看到程式碼編輯器。", tip: "" }, { src: "05.png", title: "點擊部署", desc: "點擊右上角的藍色「部署 (Deploy)」按鈕。", tip: "" }, { src: "06.png", title: "新增部署", desc: "選擇「新增部署作業 (New deployment)」。", tip: "" }, { src: "07-GradeFlow.png", dynamic: true, title: "設定權限 (重要)", desc: "請依照專案類型設定權限。", tip: "GradeFlow 務必設為 Anyone，家長才能看到。" }, { src: "08.png", title: "確認部署", desc: "設定完成後，點擊「部署」。", tip: "" } ] },
+            { id: 3, title: "授予存取權", icon: "fa-solid fa-key", images: [ { src: "09.png", title: "開始授權", desc: "點擊「授予存取權 (Authorize access)」。", tip: "" }, { src: "10.png", title: "選擇帳號", desc: "選擇您的 Google 帳號。", tip: "" }, { src: "11.png", title: "進階設定", desc: "看到紅色警告是正常的。\n點擊左下角「Advanced (進階)」。", tip: "這是 Google 的標準安全機制。" }, { src: "12.png", title: "前往應用程式", desc: "點擊下方的「Go to ... (unsafe)」。", tip: "" }, { src: "13.png", title: "允許權限", desc: "點擊「Allow (允許)」。", tip: "" }, { src: "14.png", title: "複製網址", desc: "複製畫面上的「網頁應用程式網址」。", tip: "" }, { src: "15.png", title: "完成", desc: "點擊完成關閉視窗。", tip: "" } ] },
+            { id: 4, title: "自動排程 (Notifier)", icon: "fa-regular fa-clock", images: [ { src: "16.png", title: "開啟觸發條件", desc: "點擊左側的鬧鐘圖示 (觸發條件)。", tip: "" }, { src: "17.png", title: "新增觸發", desc: "點擊右下角藍色按鈕「新增觸發條件」。", tip: "" }, { src: "18.png", title: "選擇函式", desc: "函式選擇 `triggerDailyAutomation`。", tip: "選錯函式機器人不會動喔！" }, { src: "19.png", title: "確認函式", desc: "再次確認是 `triggerDailyAutomation`。", tip: "" }, { src: "20.png", title: "活動來源", desc: "選擇「時間驅動 (Time-driven)」。", tip: "" }, { src: "21.png", title: "設定頻率", desc: "選擇「每日計時器」，時間建議設在放學後。", tip: "" }, { src: "22.png", title: "儲存", desc: "點擊儲存，完成設定！", tip: "" } ] }
         ];
 
-        // --- 2. STATE ---
-        let state = {
-            stepIndex: 0, // 0-based index for stepsConfig
-            imgIndex: 0,  // 0-based index for images inside a step
-            deployType: 'gf' // 'gf' or 'nt'
-        };
+        let state = { stepIndex: 0, imgIndex: 0, deployType: 'gf' };
 
-        // --- 3. INITIALIZATION ---
         function init() {
             renderSidebar();
-            
-            // Keyboard Nav
             document.addEventListener('keydown', (e) => {
                 if(document.getElementById('panel-gallery').style.display !== 'none') {
                     if(e.key === 'ArrowRight') nextSlide();
                     if(e.key === 'ArrowLeft') prevSlide();
                 }
             });
-            
-            // Show Video initially
             jumpToVideo();
         }
 
-        // --- 4. RENDER SIDEBAR (Tree View) ---
         function renderSidebar() {
             const container = document.getElementById('sidebar-tree');
-            container.innerHTML = ''; // Clear
-
+            container.innerHTML = ''; 
             stepsConfig.forEach((step, idx) => {
-                // Major Step Header
                 const groupDiv = document.createElement('div');
                 groupDiv.className = `nav-group`;
-                
                 const headerBtn = document.createElement('button');
                 headerBtn.id = `nav-header-${idx}`;
-                headerBtn.className = `nav-group-header w-full text-left px-4 py-3 flex items-center justify-between group border-b border-slate-50`;
-                headerBtn.onclick = () => jumpToStep(idx + 1, 0); // 1-based step ID
-                
-                headerBtn.innerHTML = `
-                    <div class="flex items-center gap-3">
-                        <span class="w-6 h-6 rounded bg-slate-100 text-slate-500 flex items-center justify-center text-xs font-bold group-hover:bg-blue-100 group-hover:text-blue-600">${step.id}</span>
-                        <span class="font-bold text-sm text-slate-700">${step.title}</span>
-                    </div>
-                    <i class="fa-solid fa-chevron-down text-xs text-slate-300 transition-transform duration-200" id="arrow-${idx}"></i>
-                `;
+                headerBtn.className = `nav-group-header w-full text-left px-4 py-3 flex items-center justify-between group border-b border-white/5`;
+                headerBtn.onclick = () => jumpToStep(idx + 1, 0); 
+                headerBtn.innerHTML = `<div class="flex items-center gap-3"><span class="step-num w-6 h-6 rounded bg-slate-800 text-slate-400 flex items-center justify-center text-xs font-bold transition-colors">${step.id}</span><span class="font-bold text-sm text-slate-300 group-hover:text-white transition-colors">${step.title}</span></div><i class="fa-solid fa-chevron-down text-xs text-slate-600 transition-transform duration-200" id="arrow-${idx}"></i>`;
                 groupDiv.appendChild(headerBtn);
-
-                // Sub-items List (Container)
                 const subList = document.createElement('div');
                 subList.id = `sublist-${idx}`;
-                subList.className = `nav-sub-list bg-white`;
-                
+                subList.className = `nav-sub-list`;
                 step.images.forEach((img, imgIdx) => {
                     const subItem = document.createElement('div');
                     subItem.id = `subitem-${idx}-${imgIdx}`;
-                    subItem.className = `sub-item py-2 pr-4 hover:bg-slate-50 block truncate`;
+                    subItem.className = `sub-item py-2 pr-4 block truncate`;
                     subItem.innerText = img.title;
-                    subItem.onclick = (e) => {
-                        e.stopPropagation();
-                        jumpToStep(idx + 1, imgIdx);
-                    };
+                    subItem.onclick = (e) => { e.stopPropagation(); jumpToStep(idx + 1, imgIdx); };
                     subList.appendChild(subItem);
                 });
-
                 groupDiv.appendChild(subList);
                 container.appendChild(groupDiv);
             });
         }
 
-        // --- 5. NAVIGATION LOGIC ---
-        
         function jumpToVideo() {
-            document.getElementById('nav-video').classList.add('active'); // Video Btn Style
-            // Reset Sidebar Highlights
+            document.getElementById('nav-video').classList.add('bg-slate-800'); 
             document.querySelectorAll('.nav-group-header').forEach(el => el.classList.remove('active'));
             document.querySelectorAll('.sub-item').forEach(el => el.classList.remove('active'));
             document.querySelectorAll('.nav-sub-list').forEach(el => el.classList.remove('open'));
-            
             document.getElementById('panel-video').style.display = 'flex';
             document.getElementById('panel-gallery').style.display = 'none';
         }
 
         function jumpToStep(stepId, imgIdx) {
-            // Logic Index
             const sIdx = stepId - 1;
             state.stepIndex = sIdx;
             state.imgIndex = imgIdx;
-
-            // UI Mode
-            document.getElementById('nav-video').classList.remove('active');
+            document.getElementById('nav-video').classList.remove('bg-slate-800');
             document.getElementById('panel-video').style.display = 'none';
             document.getElementById('panel-gallery').style.display = 'flex';
             document.getElementById('panel-gallery').classList.remove('hidden');
-
+            document.getElementById('panel-gallery').classList.remove('active');
+            void document.getElementById('panel-gallery').offsetWidth;
+            document.getElementById('panel-gallery').classList.add('active');
             updateSidebarUI();
             updateGalleryUI();
         }
 
         function nextSlide() {
             const currentStepConfig = stepsConfig[state.stepIndex];
-            if (state.imgIndex < currentStepConfig.images.length - 1) {
-                // Next Image in same step
-                state.imgIndex++;
-            } else {
-                // Next Step
-                if (state.stepIndex < stepsConfig.length - 1) {
-                    state.stepIndex++;
-                    state.imgIndex = 0;
-                } else {
-                    alert("恭喜！所有步驟已完成！");
-                    return;
-                }
-            }
+            if (state.imgIndex < currentStepConfig.images.length - 1) { state.imgIndex++; } 
+            else { if (state.stepIndex < stepsConfig.length - 1) { state.stepIndex++; state.imgIndex = 0; } else { alert("恭喜！所有部署步驟已完成！"); return; } }
             updateSidebarUI();
             updateGalleryUI();
         }
 
         function prevSlide() {
-            if (state.imgIndex > 0) {
-                // Prev Image in same step
-                state.imgIndex--;
-            } else {
-                // Prev Step
-                if (state.stepIndex > 0) {
-                    state.stepIndex--;
-                    // Go to last image of prev step
-                    state.imgIndex = stepsConfig[state.stepIndex].images.length - 1;
-                } else {
-                    // Back to Video
-                    jumpToVideo();
-                    return;
-                }
-            }
+            if (state.imgIndex > 0) { state.imgIndex--; } 
+            else { if (state.stepIndex > 0) { state.stepIndex--; state.imgIndex = stepsConfig[state.stepIndex].images.length - 1; } else { jumpToVideo(); return; } }
             updateSidebarUI();
             updateGalleryUI();
         }
 
-        // --- 6. UI UPDATERS ---
-
         function updateSidebarUI() {
-            // 1. Headers Highlighting
             document.querySelectorAll('.nav-group-header').forEach((el, idx) => {
-                if (idx === state.stepIndex) {
-                    el.classList.add('active');
-                    document.getElementById(`arrow-${idx}`).style.transform = 'rotate(180deg)';
-                } else {
-                    el.classList.remove('active');
-                    document.getElementById(`arrow-${idx}`).style.transform = 'rotate(0deg)';
-                }
+                if (idx === state.stepIndex) { el.classList.add('active'); document.getElementById(`arrow-${idx}`).style.transform = 'rotate(180deg)'; } 
+                else { el.classList.remove('active'); document.getElementById(`arrow-${idx}`).style.transform = 'rotate(0deg)'; }
             });
-
-            // 2. Sublists Expansion
             document.querySelectorAll('.nav-sub-list').forEach((el, idx) => {
                 if (idx === state.stepIndex) el.classList.add('open');
                 else el.classList.remove('open');
             });
-
-            // 3. Subitem Highlighting
             document.querySelectorAll('.sub-item').forEach(el => el.classList.remove('active'));
             const activeSub = document.getElementById(`subitem-${state.stepIndex}-${state.imgIndex}`);
-            if(activeSub) {
-                activeSub.classList.add('active');
-                activeSub.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-            }
+            if(activeSub) { activeSub.classList.add('active'); activeSub.scrollIntoView({ behavior: 'smooth', block: 'nearest' }); }
         }
 
         function updateGalleryUI() {
             const stepData = stepsConfig[state.stepIndex];
             const imgData = stepData.images[state.imgIndex];
-
-            // Info Panel (Fixed ID to info-badge)
             document.getElementById('info-badge').innerText = `Step 0${state.stepIndex + 1}`;
             document.getElementById('info-counter').innerText = `${state.imgIndex + 1}/${stepData.images.length}`;
             document.getElementById('info-step-title').innerText = stepData.title;
-
-            // Deploy Switcher Visibility (Only Step 2)
             const switcher = document.getElementById('deploy-switcher');
-            if (state.stepIndex === 1) switcher.classList.remove('hidden'); // Step 2 is index 1
-            else switcher.classList.add('hidden');
-
-            // Image & Text Content
+            if (state.stepIndex === 1) switcher.classList.remove('hidden'); else switcher.classList.add('hidden');
             let imgSrc = `Guide/images/${imgData.src}`;
             let descText = imgData.desc;
-
-            // Handle Dynamic Content for Step 2
+            let browserTitle = imgData.src; 
             if (imgData.dynamic) {
-                if (state.deployType === 'gf') {
-                    imgSrc = `Guide/images/07-GradeFlow.png`;
-                    descText = "GradeFlow 設定：\n1. 執行身分：我 (Me)\n2. 誰可以存取：**任何人 (Anyone)**\n(家長需透過此權限存取)";
-                } else {
-                    imgSrc = `Guide/images/07-Notifier.png`;
-                    descText = "Notifier 設定：\n1. 執行身分：我 (Me)\n2. 誰可以存取：**僅限本人 (Only Myself)**\n(保護後台安全)";
-                }
+                if (state.deployType === 'gf') { imgSrc = `Guide/images/07-GradeFlow.png`; descText = "GradeFlow 設定：\n1. 執行身分：我 (Me)\n2. 誰可以存取：**任何人 (Anyone)**\n(家長需透過此權限存取)"; browserTitle = "Deploy_GradeFlow"; } 
+                else { imgSrc = `Guide/images/07-Notifier.png`; descText = "Notifier 設定：\n1. 執行身分：我 (Me)\n2. 誰可以存取：**僅限本人 (Only Myself)**\n(保護後台安全)"; browserTitle = "Deploy_Notifier"; }
             }
-
-            // Update Image
             const imgEl = document.getElementById('active-image');
-            imgEl.style.opacity = 0.5;
-            setTimeout(() => {
-                imgEl.src = imgSrc;
-                imgEl.style.opacity = 1;
-            }, 100);
-
-            // Update Text
+            const loader = document.getElementById('img-loader');
+            loader.style.display = 'flex'; imgEl.style.opacity = 0;
+            const tempImg = new Image();
+            tempImg.src = imgSrc;
+            tempImg.onload = () => { imgEl.src = imgSrc; document.getElementById('browser-title').innerText = browserTitle; loader.style.display = 'none'; imgEl.style.opacity = 1; };
             document.getElementById('info-img-title').innerText = imgData.title;
-            document.getElementById('info-desc').innerHTML = descText.replace(/\*\*(.*?)\*\*/g, '<strong class="text-blue-600">$1</strong>');
-            
-            // Tip
+            document.getElementById('info-desc').innerHTML = descText.replace(/\*\*(.*?)\*\*/g, '<strong class="text-blue-400">$1</strong>');
             const tipEl = document.getElementById('info-tip');
-            if (imgData.tip) {
-                tipEl.classList.remove('hidden');
-                document.getElementById('info-tip-text').innerText = imgData.tip;
-            } else {
-                tipEl.classList.add('hidden');
-            }
+            if (imgData.tip) { tipEl.classList.remove('hidden'); document.getElementById('info-tip-text').innerText = imgData.tip; } else { tipEl.classList.add('hidden'); }
         }
 
-        // Switch Deploy Type (GF/NT)
         function setDeployType(type) {
             state.deployType = type;
             const btnGf = document.getElementById('btn-gf');
             const btnNt = document.getElementById('btn-nt');
-
-            if (type === 'gf') {
-                btnGf.className = 'flex-1 py-1.5 text-xs font-bold rounded bg-white text-blue-700 shadow-sm transition';
-                btnNt.className = 'flex-1 py-1.5 text-xs font-bold rounded text-slate-500 hover:text-slate-700 transition';
-            } else {
-                btnGf.className = 'flex-1 py-1.5 text-xs font-bold rounded text-slate-500 hover:text-slate-700 transition';
-                btnNt.className = 'flex-1 py-1.5 text-xs font-bold rounded bg-white text-green-700 shadow-sm transition';
-            }
-            updateGalleryUI(); // Refresh current slide
+            if (type === 'gf') { btnGf.className = 'flex-1 py-1.5 text-xs font-bold rounded bg-slate-800 text-blue-400 shadow transition'; btnNt.className = 'flex-1 py-1.5 text-xs font-bold rounded text-slate-500 hover:text-slate-300 transition'; } 
+            else { btnGf.className = 'flex-1 py-1.5 text-xs font-bold rounded text-slate-500 hover:text-slate-300 transition'; btnNt.className = 'flex-1 py-1.5 text-xs font-bold rounded bg-slate-800 text-green-400 shadow transition'; }
+            updateGalleryUI();
         }
 
-        // Start
         init();
-
     </script>
 </body>
 </html>

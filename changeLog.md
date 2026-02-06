@@ -4,6 +4,34 @@ All notable changes to the **GMSPro** project will be documented in this file.
 
 The project consists of two main modules: `[GradeFlow]` and `[Notifier]`.
 
+## v10.11 - The Resilience Update (2026-02-03)
+*針對系統安全性、資料同步容錯率以及自動化流程的重大補強。*
+
+### 🔐 Security & Integrity (資安與資料完整性)
+- **⚙️ [Database] 讀取權限私有化 (Private Access)**：
+  - 將原始成績讀取函式更名為 `fetchHomeroomMasterData_()`（加上底線）。
+  - **安全性**：強制該函式僅能由後端內部呼叫，防止惡意使用者透過瀏覽器 Console 執行 `google.script.run` 直接抓取未加密的原始成績資料。
+- **⚙️ [Database] 強制覆蓋同步 (Snapshot Sync)**：
+  - 捨棄舊有的「增量更新 (Append)」邏輯，改採「先清空 (`clear()`)、後寫入」模式。
+  - **效益**：確保資料庫與試算表狀態完全一致，解決重複同步造成的資料膨脹問題，並能自動清除被刪除的作業。
+- **⚙️ [Database] 欄位動態定位 (Dynamic Anchor)**：
+  - 讀取成績時不再依賴固定欄位順序，改為動態搜尋「座號」與「姓名」標題所在位置。
+  - **容錯**：即使小老師移動欄位或插入新欄，系統仍能精準鎖定成績位置，不會讀錯資料。
+
+### ⚡ Automation & Workflow (自動化與流程)
+- **🔵 [Creator] 待處理清單直寫 (Direct Pending Write)**：
+  - 建立檔案成功後，直接將連結寫入後端 `PENDING_CONFIG_LIST` 屬性，取代不穩定的資料夾掃描機制。
+  - **效益**：新建立的檔案會「立即」出現在連結管理中心的黃色待處理區，無須重新整理網頁。
+- **🔵 [Creator] 學生名單功能回歸**：
+  - 在「單一建立」與「批次建立」介面恢復「學生名單」輸入框。
+  - **優化**：放寬格式限制，支援從 Excel 直接貼上（自動解析 Tab、逗號、半形/全形空白）。
+- **⚙️ [System] 設定頁自動同步**：
+  - 開啟「連結管理中心」或「批次設定視窗」時，自動呼叫後端抓取最新待處理項目。
+
+### 🐛 Bug Fixes (錯誤修復)
+- **⚙️ [System] 導航修復**：補上遺失的 `jumpToDbCreator` 函式，解決點擊「建立資料庫」連結時發生的 `ReferenceError`。
+- **🟢 [GradeFlow] 批次防呆**：修正批次管理介面因讀取不到 `title` 屬性導致的 `match` 錯誤，並加入防呆檢查避免紅字報錯。
+
 ## v10.10 - The Integration Update (2026-02-01)
 *整合檔案瀏覽器介面與自動化流程，提升整體協作效率。*
 - **[System] 檔案總管 (File Explorer)**：新增統一的檔案瀏覽介面，可直接預覽、開啟或管理由系統產生的試算表。
