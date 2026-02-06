@@ -121,4 +121,23 @@
             showToast("錯誤", "發送失敗：" + err.message, "error",5000);
         }).triggerPreviewSummary(); // 呼叫後端剛剛寫好的函式
     }
+
+    function jumpToDbCreator() {
+        // 1. 隱藏所有主要頁面 (View)
+        document.querySelectorAll('.view-section').forEach(el => el.classList.add('hidden'));
+        
+        // 2. 顯示建立工廠頁面
+        const creatorView = document.getElementById('view-creator');
+        if (creatorView) {
+            creatorView.classList.remove('hidden');
+            creatorView.classList.add('flex'); // 確保 flex 排版正常
+        }
+        
+        // 3. 呼叫建立工廠的初始化函式，並切換到 DB 工具分頁
+        if (typeof openCreatorTool === 'function') {
+            openCreatorTool('db');
+        } else {
+            console.error("找不到 openCreatorTool 函式，請確認 JS_Creator.html 是否已載入");
+        }
+    }
 </script>

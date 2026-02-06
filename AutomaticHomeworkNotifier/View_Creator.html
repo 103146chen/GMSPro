@@ -92,6 +92,11 @@
                             <label class="block text-sm font-bold text-slate-600 mb-2">分頁設定 (用逗號分隔)</label>
                             <input type="text" id="inp-single-sheets" class="w-full bg-white border border-slate-300 rounded-lg px-4 py-3 focus:ring-2 focus:ring-blue-500 outline-none" value="第一次段考, 第二次段考, 平時成績">
                         </div>
+                        <div>
+                            <label class="block text-sm font-bold text-slate-600 mb-2">學生名單 (座號, 姓名, Email)</label>
+                            <div class="text-xs text-slate-400 mb-2">請從 Excel 複製貼上 (三欄：座號、姓名、Email)，或使用逗號分隔。</div>
+                            <textarea id="inp-single-students" class="w-full bg-white border border-slate-300 rounded-lg px-4 py-3 focus:ring-2 focus:ring-blue-500 outline-none h-32 font-mono text-sm leading-relaxed" placeholder="01	王小明	user1@test.com&#10;02	李小華	user2@test.com"></textarea>
+                        </div>
                         <div class="pt-4">
                             <button onclick="runSingleCreate()" id="btn-create-single" class="w-full bg-blue-600 hover:bg-blue-700 text-white py-3 rounded-lg font-bold text-base shadow-md transition-all">
                                 <i class="fa-solid fa-plus mr-2"></i>立即建立檔案
@@ -103,6 +108,17 @@
 
             <div id="tool-batch" class="creator-tool-panel hidden w-full h-full flex flex-col">
                 <div class="flex-1 overflow-auto bg-slate-50/50 p-6">
+                    <div class="mb-4 bg-white p-4 rounded-lg border border-indigo-100 shadow-sm">
+                        <div class="flex items-center gap-2 cursor-pointer group select-none" onclick="document.getElementById('batch-student-area').classList.toggle('hidden')">
+                                <i class="fa-solid fa-users text-indigo-500 group-hover:scale-110 transition-transform"></i>
+                                <span class="font-bold text-slate-700 text-sm group-hover:text-indigo-600">設定統一學生名單 (點擊展開)</span>
+                                <i class="fa-solid fa-chevron-down text-xs text-slate-400"></i>
+                        </div>
+                        <div id="batch-student-area" class="hidden mt-3 animate-fade-in">
+                            <div class="text-xs text-slate-500 mb-2">若此批次建立的檔案皆屬於同一班級，可在此貼上名單，系統會自動套用到下方所有檔案。</div>
+                                <textarea id="inp-batch-students" class="w-full bg-slate-50 border border-slate-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-indigo-500 outline-none h-24 font-mono text-sm" placeholder="01	王小明	user1@test.com"></textarea>
+                        </div>
+                    </div>
                     <table class="w-full border-collapse text-sm bg-white shadow-sm rounded-lg overflow-hidden">
                         <thead>
                             <tr class="bg-slate-100 text-slate-600 font-bold border-b border-slate-200">

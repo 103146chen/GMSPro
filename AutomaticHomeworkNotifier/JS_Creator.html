@@ -10,6 +10,19 @@
         refreshFolderInfo();
         addBatchRow();
     }
+    // --- 工具函式：解析學生名單 ---
+    function parseStudentList(str) {
+        if (!str || !str.trim()) return null;
+        return str.trim().split('\n').map(line => {
+            // [修正] 支援 Tab(\t)、半形逗號(,)、全形逗號(，)、半形空白( )、全形空白(　)
+            let parts = line.split(/[ \t,，　]+/); 
+            return [
+                parts[0] ? parts[0].trim() : "", 
+                parts[1] ? parts[1].trim() : "", 
+                parts[2] ? parts[2].trim() : ""
+            ];
+        }).filter(row => row[0] || row[1]);
+    }
 
     // --- Modal 控制 (新) ---
     function openDriveBrowser() {
@@ -183,21 +196,46 @@
 
     // --- 執行邏輯 ---
     function runSingleCreate() {
-        const title = document.getElementById('inp-single-title').value.trim();
-        const sheetsStr = document.getElementById('inp-single-sheets').value.trim();
+        const elTitle = document.getElementById('inp-single-title');
+        const elSheets = document.getElementById('inp-single-sheets');
+        const elStudents = document.getElementById('inp-single-students');
+
+        const title = elTitle ? elTitle.value.trim() : "";
+        const sheetsStr = elSheets ? elSheets.value.trim() : "";
+        const studentStr = elStudents ? elStudents.value : "";
+        
         if(!title) { showToast("缺少資訊", "請輸入檔案名稱", "error"); return; }
+        
         const btn = document.getElementById('btn-create-single');
         const orgHtml = btn.innerHTML;
         btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin mr-2"></i>建立中...'; btn.disabled = true;
-        const config = { title: title, sheetsStr: sheetsStr.replace(/,/g, '\n'), permission: { isPublic: false }, studentList: null };
+        
+        const studentList = parseStudentList(studentStr);
+        const config = { 
+            title: title, 
+            sheetsStr: sheetsStr.replace(/,/g, '\n'), 
+            permission: { isPublic: false }, 
+            studentList: studentList 
+        };
+        
         google.script.run.withSuccessHandler(res => {
             btn.innerHTML = orgHtml; btn.disabled = false;
-            if(res.success) { showToast("建立成功", "檔案已建立", "success"); window.open(res.results[0].url, '_blank'); } else showToast("建立失敗", res.msg, "error");
+            if(res.success) { 
+                showToast("建立成功", "檔案已建立", "success");
+                window.open(res.results[0].url, '_blank'); 
+                if(elTitle) elTitle.value = "";
+            } else {
+                showToast("建立失敗", res.msg, "error");
+            }
         }).apiBatchCreateTemplates([config]);
     }
 
     function runBatchCreate() {
         const rows = document.querySelectorAll('.batch-row');
+        const elBatchStudents = document.getElementById('inp-batch-students');
+        const commonStudentStr = elBatchStudents ? elBatchStudents.value : "";
+        const commonStudentList = parseStudentList(commonStudentStr);
+
         let configs = [];
         rows.forEach(row => {
             const title = row.querySelector('.inp-title').value.trim();
@@ -205,26 +243,35 @@
             const sheetsStr = row.querySelector('.inp-sheets').value.trim();
             const editorEmail = row.querySelector('.inp-editor').value.trim();
             const isPublic = row.querySelector('.inp-public').checked;
-            configs.push({ title: title, sheetsStr: sheetsStr.replace(/,/g, '\n'), permission: { isPublic: isPublic, editorEmail: editorEmail }, studentList: null });
+            configs.push({ 
+                title: title, 
+                sheetsStr: sheetsStr.replace(/,/g, '\n'), 
+                permission: { isPublic: isPublic, editorEmail: editorEmail }, 
+                studentList: commonStudentList
+            });
         });
+
         if(configs.length === 0) { showToast("無效輸入", "請至少輸入一個檔案名稱", "error"); return; }
-        
+
         const btn = document.getElementById('btn-run-batch-top');
         const orgHtml = btn.innerHTML;
         btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin mr-2"></i>處理中...'; btn.disabled = true;
-        
         const logArea = document.getElementById('batch-log-container');
-        logArea.classList.remove('hidden');
-        logArea.innerHTML = '<div class="animate-pulse">正在初始化系統排程...</div>';
-        
+        if(logArea) { logArea.classList.remove('hidden'); logArea.innerHTML = '<div class="animate-pulse">正在初始化系統排程...</div>'; }
+
         google.script.run.withSuccessHandler(res => {
             btn.innerHTML = orgHtml; btn.disabled = false;
             if(res.success) {
                 let html = `<div class="mb-2 font-bold text-white border-b border-slate-600 pb-1">執行結果彙整 (${res.results.length} 筆)</div>`;
-                res.results.forEach(r => { html += r.success ? `<div class="flex items-center gap-2 mb-1"><span class="text-green-400">✅</span> <a href="${r.url}" target="_blank" class="underline hover:text-white">${r.title}</a></div>` : `<div class="flex items-center gap-2 mb-1"><span class="text-red-400">❌</span> <span class="text-slate-300">${r.title}: ${r.error}</span></div>`; });
-                logArea.innerHTML = html;
+                res.results.forEach(r => { 
+                    html += r.success ? `<div class="flex items-center gap-2 mb-1"><span class="text-green-400">✅</span> <a href="${r.url}" target="_blank" class="underline hover:text-white">${r.title}</a></div>` : `<div class="flex items-center gap-2 mb-1"><span class="text-red-400">❌</span> <span class="text-slate-300">${r.title}: ${r.error}</span></div>`; 
+                });
+                if(logArea) logArea.innerHTML = html;
                 showToast("批次完成", `成功建立 ${res.results.filter(r=>r.success).length} 個檔案`, "success");
-            } else { logArea.innerHTML = `<div class="text-red-400 font-bold">❌ 系統錯誤: ${res.msg}</div>`; showToast("發生錯誤", res.msg, "error"); }
+            } else { 
+                if(logArea) logArea.innerHTML = `<div class="text-red-400 font-bold">❌ 系統錯誤: ${res.msg}</div>`; 
+                showToast("發生錯誤", res.msg, "error"); 
+            }
         }).apiBatchCreateTemplates(configs);
     }
 

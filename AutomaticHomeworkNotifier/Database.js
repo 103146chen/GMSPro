@@ -16,11 +16,17 @@ function apiSyncToDatabase(dbUrl) {
 
     const result = apiFetchHomeroomMasterData();
     if (!result.success) throw new Error("無法讀取成績資料");
-    const masterData = result.data;
+    
+    // [去重邏輯] 確保同一位學生、同一門課、同一個作業只有一筆資料
+    // Key: 科目_分頁_作業_座號
+    const uniqueMap = new Map();
+    result.data.forEach(item => {
+        const key = `${item.subject}_${item.sheet}_${item.task}_${item.seatNo}`;
+        uniqueMap.set(key, item); 
+    });
+    const masterData = Array.from(uniqueMap.values());
     
     const ss = SpreadsheetApp.openByUrl(dbUrl);
-    
-    // [修正 1] 改用 SYSTEM_SALT 與 FILE_ID (不再使用 DYNAMIC_KEY)
     const SYSTEM_SALT = getProperty_("SYSTEM_SALT");
     const FILE_ID = ss.getId();
 
@@ -28,6 +34,10 @@ function apiSyncToDatabase(dbUrl) {
 
     let sourceSheet = ss.getSheetByName("DB_Source");
     if (!sourceSheet) sourceSheet = ss.insertSheet("DB_Source");
+
+    // ★★★ 關鍵：清空舊資料 ★★★
+    sourceSheet.clear(); 
+    SpreadsheetApp.flush(); 
 
     let sourceRows = [];
     sourceRows.push(["座號", "姓名", "科目", "作業名稱", "加密數據 (Score/Rank/Stats)", "更新時間"]);
@@ -45,9 +55,6 @@ function apiSyncToDatabase(dbUrl) {
         };
 
         const jsonStr = JSON.stringify(sensitivePayload);
-        
-        // [修正 2] 移除 randomPadding (因為新的 cipherData_ 已經內建 IV 了)
-        // [修正 3] 呼叫新版加密：傳入 (內容, true, Salt, FileID)
         const encryptedPayload = cipherData_(jsonStr, true, SYSTEM_SALT, FILE_ID);
 
         sourceRows.push([
@@ -60,14 +67,15 @@ function apiSyncToDatabase(dbUrl) {
         ]);
     });
 
-    sourceSheet.clearContents(); 
     if (sourceRows.length > 0) {
         sourceSheet.getRange(1, 1, sourceRows.length, sourceRows[0].length).setValues(sourceRows);
     }
+    
+    // 格式美化
     sourceSheet.getRange("A1:F1").setBackground("#e2e8f0").setFontWeight("bold");
     sourceSheet.setFrozenRows(1);
 
-    writeLog(dbUrl, `同步成功：更新 ${masterData.length} 筆成績紀錄`);
+    writeLog(dbUrl, `同步成功：覆蓋更新 ${masterData.length} 筆資料`);
 
     return { success: true, count: masterData.length };
 
@@ -186,12 +194,12 @@ function apiFetchHomeroomMasterData() {
   homeroomList.forEach(config => {
     try {
       const ss = SpreadsheetApp.openByUrl(config.url);
-      const studentMap = getStudentMap(ss); 
       const allSheets = ss.getSheets();
       const targetSet = (config.syncTargets && config.syncTargets.length > 0) ? new Set(config.syncTargets) : null;
 
       allSheets.forEach(sheet => {
         const sheetName = sheet.getName();
+        // 排除非成績分頁
         if (sheetName === "設定" || sheetName === "Setting" || sheetName.includes("名單")) return;
         if (targetSet && !targetSet.has(sheetName)) return;
 
@@ -199,38 +207,72 @@ function apiFetchHomeroomMasterData() {
         const lastCol = sheet.getLastColumn();
         if (lastRow < 3 || lastCol < 3) return; 
 
+        // 一次讀取整張表以提升效能
         const allValues = sheet.getRange(1, 1, lastRow, lastCol).getValues();
         
-        let headerRowIdx = 1; 
-        for(let r=0; r<Math.min(5, allValues.length); r++) { 
-            if(allValues[r].join("").includes("座號")) { headerRowIdx = r; break; } 
+        // --- 1. 動態定位錨點 ---
+        // 尋找含有「座號」的標題列
+        let headerRowIdx = -1;
+        let colIdxSeat = -1; 
+        let colIdxName = -1; 
+        
+        for(let r=0; r < Math.min(10, allValues.length); r++) { 
+            const rowStr = allValues[r].join("");
+            if(rowStr.includes("座號")) { 
+                headerRowIdx = r;
+                // 掃描該列，找出座號與姓名在哪一欄
+                for(let c=0; c<allValues[r].length; c++) {
+                    const cell = String(allValues[r][c]).trim();
+                    if(cell === "座號") colIdxSeat = c;
+                    else if(cell === "姓名") colIdxName = c;
+                }
+                break; 
+            } 
         }
         
+        // 如果找不到座號欄，視為無效分頁
+        if (headerRowIdx === -1 || colIdxSeat === -1) {
+            // log.push(`[${config.name}-${sheetName}] 格式不符 (找不到座號欄)，略過`);
+            return;
+        }
+
         const taskNameRow = allValues[headerRowIdx]; 
         const dateRow = headerRowIdx > 0 ? allValues[headerRowIdx - 1] : null;
         
-        for (let c = 2; c < lastCol; c++) {
-            const taskName = taskNameRow[c];
-            if (!taskName || String(taskName).trim() === "") continue;
+        // --- 2. 遍歷作業欄位 ---
+        for (let c = 0; c < lastCol; c++) {
+            // 跳過座號、姓名與空白欄
+            if (c === colIdxSeat || c === colIdxName) continue;
+            
+            const taskName = String(taskNameRow[c]).trim();
+            if (!taskName) continue;
+            
+            // 排除非作業欄位
+            if (["Email", "備註", "總分", "平均", "排名", "等第"].includes(taskName)) continue;
 
-            const colUid = Utilities.base64Encode(`${sheetName}_${c}`).replace(/=/g, '');
+            const colUid = Utilities.base64Encode(`${sheetName}_${taskName}`).replace(/=/g, '');
             let currentColumnData = [];
 
+            // --- 3. 讀取該欄成績 ---
             for(let r = headerRowIdx + 1; r < allValues.length; r++) {
                 const row = allValues[r];
-                const seatNo = String(row[0]).trim(); 
+                const seatNo = String(row[colIdxSeat]).trim(); 
                 
                 if (seatNo) {
-                    let studentName = (studentMap[seatNo]) ? studentMap[seatNo].name : (row[1] || "");
+                    let studentName = (colIdxName !== -1) ? row[colIdxName] : "";
                     const rawScore = row[c];
                     const cleanScore = String(rawScore).trim();
 
                     if (cleanScore !== "") {
                         const parsed = parseScoreValue(cleanScore);
+                        
+                        // 日期防呆
                         let dateStr = "";
                         if (dateRow && dateRow[c]) {
-                            const rawDate = dateRow[c];
-                            dateStr = (rawDate instanceof Date) ? Utilities.formatDate(rawDate, "GMT+8", "MM/dd") : String(rawDate).trim();
+                            try {
+                                const rawDate = dateRow[c];
+                                dateStr = (rawDate instanceof Date) ? Utilities.formatDate(rawDate, "GMT+8", "MM/dd") : String(rawDate).trim();
+                            } catch(e) { dateStr = ""; }
                         }
 
                         currentColumnData.push({
@@ -238,7 +280,7 @@ function apiFetchHomeroomMasterData() {
                             name: studentName,
                             subject: config.name,
                             sheet: sheetName,
-                            task: String(taskName),
+                            task: taskName,
                             date: dateStr,
                             score: parsed.display,
                             calcScore: parsed.calc,
@@ -250,32 +292,30 @@ function apiFetchHomeroomMasterData() {
 
             if (currentColumnData.length === 0) continue;
 
+            // --- 4. 計算排名與統計 ---
+            // 排序分數高到低 (用於排名)
             currentColumnData.sort((a, b) => {
                 const valA = (a.calcScore === null) ? -99999 : Number(a.calcScore);
                 const valB = (b.calcScore === null) ? -99999 : Number(b.calcScore);
                 return valB - valA;
             });
 
-            const validScores = currentColumnData
-                .map(i => i.calcScore)
-                .filter(s => s !== null && !isNaN(Number(s)));
+            const validScores = currentColumnData.map(i => i.calcScore).filter(s => s !== null && !isNaN(Number(s)));
             validScores.sort((a,b) => b - a);
             const stats = calculateStats(validScores);
 
+            // 賦予排名
             let currentRank = 1;
             for (let i = 0; i < currentColumnData.length; i++) {
                 const item = currentColumnData[i];
                 const score = (item.calcScore === null) ? -99999 : Number(item.calcScore);
 
-                if (score === -99999) {
-                    item.rank = "-";
-                } else {
+                if (score === -99999) item.rank = "-";
+                else {
                     if (i > 0) {
                         const prevScore = (currentColumnData[i-1].calcScore === null) ? -99999 : Number(currentColumnData[i-1].calcScore);
                         if (score < prevScore) currentRank = i + 1;
-                    } else {
-                        currentRank = 1; 
-                    }
+                    } else currentRank = 1; 
                     item.rank = currentRank;
                 }
                 item.stats = stats;
@@ -286,6 +326,7 @@ function apiFetchHomeroomMasterData() {
     } catch (e) { log.push(`讀取失敗 [${config.name}]: ${e.message}`); }
   });
 
+  // 最後依照座號排序整份名單
   masterList.sort((a, b) => { 
       const seatA = parseInt(a.seatNo); const seatB = parseInt(b.seatNo); 
       if (!isNaN(seatA) && !isNaN(seatB)) return (seatA - seatB) || a.subject.localeCompare(b.subject); 

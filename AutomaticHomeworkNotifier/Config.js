@@ -25,14 +25,52 @@ function initAppData() {
   };
 }
 
-function apiSaveAllData(subjectList, homeroomList) {
+/**
+ * [修改] 儲存所有資料 (包含待處理清單)
+ * 增加第三個參數 pendingList
+ */
+function apiSaveAllData(subjectList, homeroomList, pendingList) {
   try {
-    PropertiesService.getScriptProperties().setProperty("CLASS_CONFIG_LIST", JSON.stringify(subjectList));
-    PropertiesService.getScriptProperties().setProperty("HOMEROOM_CONFIG_LIST", JSON.stringify(homeroomList));
+    const props = PropertiesService.getScriptProperties();
+    props.setProperty("CLASS_CONFIG_LIST", JSON.stringify(subjectList));
+    props.setProperty("HOMEROOM_CONFIG_LIST", JSON.stringify(homeroomList));
+    
+    // 如果有傳入 pendingList 才更新，避免舊程式碼呼叫時出錯
+    if (pendingList) {
+      props.setProperty("PENDING_CONFIG_LIST", JSON.stringify(pendingList));
+    }
     return { success: true };
   } catch (e) {
     return { success: false, msg: e.toString() };
   }
+}
+
+/**
+ * [新增] 將新檔案加入待處理清單 (由 Creator 呼叫)
+ */
+function addToPendingList(name, url) {
+  const props = PropertiesService.getScriptProperties();
+  const json = props.getProperty("PENDING_CONFIG_LIST") || "[]";
+  let list = JSON.parse(json);
+  
+  // 避免重複加入
+  if (!list.some(f => f.url === url)) {
+    list.push({
+      name: name,
+      url: url,
+      created: new Date().toISOString(), // 紀錄建立時間
+      role: 'pending'
+    });
+    props.setProperty("PENDING_CONFIG_LIST", JSON.stringify(list));
+  }
+}
+
+/**
+ * [新增] 讀取待處理清單 (取代原本的資料夾掃描)
+ */
+function apiGetPendingFiles() {
+  const json = getProperty_("PENDING_CONFIG_LIST");
+  return json ? JSON.parse(json) : [];
 }
 
 function saveUserTemplates(tplJson) {

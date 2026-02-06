@@ -82,8 +82,17 @@ function apiBatchCreateTemplates(configs) {
   try {
     configs.forEach(function(cfg) {
       var res = createTemplateSheet(cfg.title, cfg.sheetsStr, cfg.permission, cfg.studentList);
-      if (res.success) { results.push({ title: cfg.title, url: res.url, success: true }); log.push("成功: " + cfg.title); } 
-      else { results.push({ title: cfg.title, error: res.msg, success: false }); log.push("失敗: " + cfg.title); }
+      if (res.success) { 
+        results.push({ title: cfg.title, url: res.url, success: true }); 
+        log.push("成功: " + cfg.title); 
+        
+        // ★★★ [關鍵修改] 建立成功後，直接存入待處理清單 ★★★
+        addToPendingList(cfg.title, res.url); 
+
+      } else { 
+        results.push({ title: cfg.title, error: res.msg, success: false }); 
+        log.push("失敗: " + cfg.title); 
+      }
     });
     return { success: true, results: results, log: log.join("\n") };
   } catch (e) { return { success: false, msg: e.toString() }; }
@@ -172,4 +181,30 @@ function apiBrowseDrive(folderId) {
     
     return { success: true, current: { id: current.getId(), name: current.getName() }, parent: parentId, children: children };
   } catch (e) { return { success: false, msg: e.toString() }; }
+}
+
+/**
+ * [新增] 自動將檔案註冊到系統
+ */
+function apiRegisterTemplate(title, url) {
+  try {
+    // 1. 取得目前的連結清單
+    var props = PropertiesService.getScriptProperties();
+    var linksStr = props.getProperty("SYSTEM_LINKS") || "[]";
+    var links = JSON.parse(linksStr);
+    
+    // 2. 新增新的連結
+    links.push({
+      id: "link_" + new Date().getTime(),
+      title: title,
+      url: url,
+      created: new Date().toISOString()
+    });
+    
+    // 3. 存回系統
+    props.setProperty("SYSTEM_LINKS", JSON.stringify(links));
+    return { success: true };
+  } catch (e) {
+    return { success: false, msg: e.toString() };
+  }
 }

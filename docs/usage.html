@@ -1,0 +1,339 @@
+<!DOCTYPE html>
+<html lang="zh-TW" class="scroll-smooth">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>操作指南 | GMSPro</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&family=Noto+Sans+TC:wght@400;500;700;900&display=swap" rel="stylesheet">
+    
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: { sans: ['Inter', 'Noto Sans TC', 'sans-serif'] },
+                    colors: { brand: { blue: '#2563EB', purple: '#9333EA', dark: '#0F172A', yellow: '#F59E0B' } },
+                    animation: { 'float': 'float 6s ease-in-out infinite' },
+                    keyframes: { float: { '0%, 100%': { transform: 'translateY(0)' }, '50%': { transform: 'translateY(-10px)' } } }
+                }
+            }
+        }
+    </script>
+    <style>
+        /* 隱藏捲軸但保留功能 */
+        .no-scrollbar::-webkit-scrollbar { display: none; }
+        .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+        
+        /* 角色切換按鈕特效 */
+        .role-btn { transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1); filter: grayscale(100%); opacity: 0.6; transform: scale(0.95); }
+        .role-btn.active { filter: grayscale(0%); opacity: 1; transform: scale(1); box-shadow: 0 10px 30px -10px rgba(0,0,0,0.2); border-color: transparent; }
+        
+        /* 內容區塊切換 */
+        .role-section { display: none; opacity: 0; transform: translateY(20px); transition: all 0.5s ease-out; }
+        .role-section.active { display: block; opacity: 1; transform: translateY(0); }
+
+        /* 模擬視窗 CSS */
+        .mockup-browser { border-radius: 1rem; background: white; box-shadow: 0 20px 40px -5px rgba(0,0,0,0.15); border: 1px solid #E2E8F0; overflow: hidden; }
+        .mockup-header { background: #F8FAFC; padding: 0.75rem 1rem; display: flex; gap: 0.5rem; border-bottom: 1px solid #E2E8F0; }
+        .dot { width: 0.75rem; height: 0.75rem; border-radius: 50%; }
+        
+        /* 模擬手機 CSS */
+        .mockup-phone { border-radius: 2.5rem; background: #1E293B; padding: 0.75rem; box-shadow: 0 25px 50px -12px rgba(0,0,0,0.25); border: 4px solid #334155; position: relative; }
+        .mockup-phone-screen { background: white; border-radius: 2rem; overflow: hidden; aspect-ratio: 9/19; position: relative; }
+        .notch { position: absolute; top: 0; left: 50%; transform: translateX(-50%); width: 40%; height: 1.5rem; background: #1E293B; border-bottom-left-radius: 1rem; border-bottom-right-radius: 1rem; z-index: 10; }
+    </style>
+</head>
+<body class="bg-slate-50 text-slate-800 antialiased selection:bg-brand-blue selection:text-white font-sans">
+
+    <nav class="fixed top-0 w-full z-50 bg-white/80 backdrop-blur-md border-b border-slate-200">
+        <div class="max-w-6xl mx-auto px-6 h-16 flex justify-between items-center">
+            <div class="flex items-center gap-4">
+                <a href="index.html" class="w-8 h-8 bg-brand-dark text-white rounded-lg flex items-center justify-center font-bold text-lg hover:scale-110 transition">G</a>
+                <span class="font-bold text-slate-700">使用指南</span>
+            </div>
+            <a href="tutorial.html" class="text-sm font-bold text-slate-500 hover:text-brand-blue transition flex items-center gap-2">
+                <i class="fa-solid fa-wrench"></i> 前往部署教學
+            </a>
+        </div>
+    </nav>
+
+    <div class="pt-32 pb-20 px-6 max-w-6xl mx-auto">
+        
+        <div class="text-center mb-16">
+            <h1 class="text-4xl md:text-5xl font-extrabold text-slate-900 mb-6">歡迎使用 GMSPro</h1>
+            <p class="text-slate-500 text-lg mb-10">請選擇您的身分，我們將為您切換專屬的操作介面。</p>
+            
+            <div class="flex justify-center gap-4 md:gap-8">
+                <button onclick="setRole('teacher')" id="btn-teacher" class="role-btn active group relative bg-white border-2 border-slate-200 rounded-2xl p-6 w-40 md:w-48 text-left hover:border-brand-blue">
+                    <div class="absolute -top-3 -right-3 bg-brand-blue text-white w-8 h-8 rounded-full flex items-center justify-center shadow-lg opacity-0 group-hover:opacity-100 transition-opacity"><i class="fa-solid fa-check"></i></div>
+                    <div class="w-12 h-12 bg-blue-50 text-brand-blue rounded-xl flex items-center justify-center text-2xl mb-3"><i class="fa-solid fa-chalkboard-user"></i></div>
+                    <div class="font-bold text-slate-800 text-lg">我是老師</div>
+                    <div class="text-xs text-slate-400 mt-1">管理成績與缺勤</div>
+                </button>
+
+                <button onclick="setRole('student')" id="btn-student" class="role-btn group relative bg-white border-2 border-slate-200 rounded-2xl p-6 w-40 md:w-48 text-left hover:border-brand-purple">
+                    <div class="absolute -top-3 -right-3 bg-brand-purple text-white w-8 h-8 rounded-full flex items-center justify-center shadow-lg opacity-0 group-hover:opacity-100 transition-opacity"><i class="fa-solid fa-check"></i></div>
+                    <div class="w-12 h-12 bg-purple-50 text-brand-purple rounded-xl flex items-center justify-center text-2xl mb-3"><i class="fa-solid fa-users"></i></div>
+                    <div class="font-bold text-slate-800 text-lg">我是家長</div>
+                    <div class="text-xs text-slate-400 mt-1">查詢子女成績</div>
+                </button>
+            </div>
+        </div>
+
+        <div id="section-teacher" class="role-section active space-y-24">
+            
+            <div class="grid md:grid-cols-2 gap-12 items-center">
+                <div class="order-2 md:order-1">
+                    <span class="text-brand-blue font-bold tracking-widest text-xs uppercase mb-2 block">Step 01</span>
+                    <h2 class="text-3xl font-bold text-slate-900 mb-6">一鍵建立班級檔案</h2>
+                    <p class="text-slate-600 mb-6 leading-relaxed">
+                        不需要手動開 Google Sheet 拉格子。使用內建的 <strong>Creator</strong>，只要貼上名單，系統自動產生標準格式的成績單。
+                    </p>
+                    
+                    <div class="space-y-4">
+                        <div class="flex gap-4 p-4 bg-white rounded-xl border border-slate-100 shadow-sm">
+                            <div class="w-8 h-8 bg-blue-100 text-blue-600 rounded-full flex items-center justify-center flex-shrink-0 font-bold">1</div>
+                            <div>
+                                <h4 class="font-bold text-slate-800">準備名單</h4>
+                                <p class="text-sm text-slate-500">Excel 包含三欄：<code>座號</code>、<code>姓名</code>、<code>Email</code>。</p>
+                            </div>
+                        </div>
+                        <div class="flex gap-4 p-4 bg-white rounded-xl border border-slate-100 shadow-sm">
+                            <div class="w-8 h-8 bg-blue-100 text-blue-600 rounded-full flex items-center justify-center flex-shrink-0 font-bold">2</div>
+                            <div>
+                                <h4 class="font-bold text-slate-800">貼上並建立</h4>
+                                <p class="text-sm text-slate-500">輸入班級名稱，貼上資料，點擊建立按鈕即可。</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="order-1 md:order-2">
+                    <div class="mockup-browser aspect-video bg-slate-50 relative group">
+                        <div class="mockup-header">
+                            <div class="dot bg-red-400"></div><div class="dot bg-yellow-400"></div><div class="dot bg-green-400"></div>
+                        </div>
+                        <div class="absolute inset-0 top-10 flex items-center justify-center overflow-hidden">
+                            <div class="text-center p-8">
+                                <i class="fa-solid fa-wand-magic-sparkles text-6xl text-brand-blue mb-4 opacity-20"></i>
+                                <p class="text-slate-400 text-sm font-bold">Creator 介面截圖位置</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="grid md:grid-cols-2 gap-12 items-center">
+                <div>
+                    <div class="mockup-browser aspect-video bg-slate-50 relative">
+                        <div class="mockup-header">
+                            <div class="dot bg-slate-300"></div><div class="dot bg-slate-300"></div>
+                        </div>
+                        <div class="absolute inset-0 top-10 flex items-center justify-center overflow-hidden">
+                            <div class="text-center p-8">
+                                <i class="fa-solid fa-link text-6xl text-slate-400 mb-4 opacity-20"></i>
+                                <p class="text-slate-400 text-sm font-bold">Links Manager 截圖位置</p>
+                            </div>
+                        </div>
+                        
+                        <div class="absolute bottom-4 right-4 bg-white p-3 rounded-lg shadow-lg border border-slate-100 text-xs animate-bounce">
+                            <i class="fa-solid fa-check-circle text-green-500 mr-1"></i> 已成功註冊 701 國文
+                        </div>
+                    </div>
+                </div>
+
+                <div>
+                    <span class="text-slate-400 font-bold tracking-widest text-xs uppercase mb-2 block">Step 02</span>
+                    <h2 class="text-3xl font-bold text-slate-900 mb-6">註冊與綁定</h2>
+                    <p class="text-slate-600 mb-6">
+                        檔案建立好後，必須在 <strong>Links Manager</strong> 告訴系統「這個檔案是用來做什麼的」。
+                    </p>
+                    <div class="space-y-4">
+                        <div class="p-4 bg-blue-50 rounded-xl border border-blue-100">
+                            <h4 class="font-bold text-blue-900 mb-1 flex items-center gap-2">
+                                <i class="fa-solid fa-envelope"></i> 勾選 For Subject
+                            </h4>
+                            <p class="text-sm text-blue-800">
+                                代表這是<strong>「任課班級」</strong>。系統會掃描此表，幫您寄送缺交作業通知信。
+                            </p>
+                        </div>
+                        <div class="p-4 bg-purple-50 rounded-xl border border-purple-100">
+                            <h4 class="font-bold text-purple-900 mb-1 flex items-center gap-2">
+                                <i class="fa-solid fa-graduation-cap"></i> 勾選 For Homeroom
+                            </h4>
+                            <p class="text-sm text-purple-800">
+                                代表這是<strong>「導師科目」</strong>。系統會將此表的成績同步到資料庫，讓學生查詢。
+                            </p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="bg-slate-900 rounded-3xl p-8 md:p-12 text-white relative overflow-hidden">
+                <div class="absolute top-0 right-0 w-96 h-96 bg-brand-blue rounded-full filter blur-[100px] opacity-20 translate-x-1/2 -translate-y-1/2"></div>
+
+                <div class="relative z-10 text-center max-w-3xl mx-auto">
+                    <h2 class="text-3xl font-bold mb-6">雙模儀表板：一鍵完成工作</h2>
+                    <p class="text-slate-300 mb-10 text-lg">
+                        透過左上角的開關，自由切換您的身分。
+                    </p>
+                    
+                    <div class="grid md:grid-cols-2 gap-6 text-left">
+                        <div class="bg-white/10 backdrop-blur border border-white/10 p-6 rounded-2xl hover:bg-white/20 transition">
+                            <div class="text-blue-400 text-3xl mb-4"><i class="fa-solid fa-toggle-off"></i></div>
+                            <h3 class="font-bold text-xl mb-2">任課模式 (Subject)</h3>
+                            <p class="text-sm text-slate-400 mb-4">專注於作業催收。</p>
+                            <div class="text-xs bg-black/30 p-3 rounded font-mono">
+                                1. 點擊「掃描」<br>
+                                2. 系統找出缺交學生<br>
+                                3. 按下「發送」寄出 Email
+                            </div>
+                        </div>
+                        <div class="bg-white/10 backdrop-blur border border-white/10 p-6 rounded-2xl hover:bg-white/20 transition">
+                            <div class="text-purple-400 text-3xl mb-4"><i class="fa-solid fa-toggle-on"></i></div>
+                            <h3 class="font-bold text-xl mb-2">導師模式 (Homeroom)</h3>
+                            <p class="text-sm text-slate-400 mb-4">專注於成績管理。</p>
+                            <div class="text-xs bg-black/30 p-3 rounded font-mono">
+                                1. 檢視全班五標<br>
+                                2. 按下「☁️ 發布/同步」<br>
+                                3. 資料加密上傳資料庫
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="border-2 border-red-100 rounded-2xl p-8 bg-red-50/50">
+                <div class="flex items-start gap-4">
+                    <div class="text-3xl text-red-500"><i class="fa-solid fa-triangle-exclamation"></i></div>
+                    <div>
+                        <h3 class="text-xl font-bold text-red-900 mb-2">進階設定：修改系統金鑰 (System Salt)</h3>
+                        <p class="text-red-800 text-sm mb-4 leading-relaxed">
+                            金鑰是資料加密的核心。如果您決定修改金鑰，請務必嚴格遵守以下流程，否則學生端將會看到亂碼。
+                        </p>
+                        <div class="flex flex-col md:flex-row gap-2">
+                            <span class="bg-white border border-red-200 text-red-700 px-3 py-1 rounded text-sm font-bold">1. 修改教師端設定</span>
+                            <i class="fa-solid fa-arrow-right text-red-300 self-center hidden md:block"></i>
+                            <span class="bg-white border border-red-200 text-red-700 px-3 py-1 rounded text-sm font-bold">2. 通知學生更新金鑰</span>
+                            <i class="fa-solid fa-arrow-right text-red-300 self-center hidden md:block"></i>
+                            <span class="bg-white border border-red-200 text-red-700 px-3 py-1 rounded text-sm font-bold">3. 重新執行「同步」</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+        </div>
+
+        <div id="section-student" class="role-section space-y-20">
+            
+            <div class="grid md:grid-cols-2 gap-16 items-center">
+                <div class="relative flex justify-center">
+                    <div class="mockup-phone w-72">
+                        <div class="notch"></div>
+                        <div class="mockup-phone-screen bg-slate-100 flex flex-col">
+                            <div class="h-14 bg-white border-b flex items-center justify-center font-bold text-sm shadow-sm mt-6">GradeFlow Setup</div>
+                            <div class="p-6 space-y-4">
+                                <div class="h-4 bg-slate-200 w-3/4 rounded mb-6"></div>
+                                <div class="bg-white p-3 rounded border border-slate-300 h-10"></div>
+                                <div class="bg-white p-3 rounded border border-slate-300 h-10"></div>
+                                <div class="bg-brand-blue h-10 rounded shadow-lg mt-4"></div>
+                            </div>
+                            <div class="absolute inset-0 bg-black/50 flex items-center justify-center text-white text-xs z-20">
+                                請替換:<br>images/student_init.png
+                            </div>
+                        </div>
+                    </div>
+                    <div class="absolute -z-10 top-20 right-10 w-64 h-64 bg-yellow-200 rounded-full blur-3xl opacity-50"></div>
+                </div>
+
+                <div>
+                    <h2 class="text-3xl font-bold text-slate-900 mb-6">初次使用設定</h2>
+                    <p class="text-slate-600 mb-8">
+                        為了保護資料安全，第一次打開網頁時，需要輸入老師提供的連結與鑰匙。
+                    </p>
+                    
+                    <div class="space-y-6">
+                        <div class="relative pl-8 border-l-2 border-slate-200 pb-2">
+                            <div class="absolute -left-[9px] top-0 w-4 h-4 rounded-full bg-slate-900 border-4 border-white shadow"></div>
+                            <h4 class="font-bold text-slate-900">資料庫網址 (URL)</h4>
+                            <p class="text-sm text-slate-500 mt-1">貼上老師傳來的網址連結。</p>
+                        </div>
+                        <div class="relative pl-8 border-l-2 border-slate-200 pb-2">
+                            <div class="absolute -left-[9px] top-0 w-4 h-4 rounded-full bg-slate-900 border-4 border-white shadow"></div>
+                            <h4 class="font-bold text-slate-900">加密金鑰 (Security Salt)</h4>
+                            <p class="text-sm text-slate-500 mt-1">
+                                輸入老師告知的專用密碼 (全班通用)。
+                                <br><span class="text-xs text-orange-500 bg-orange-50 px-2 py-0.5 rounded mt-1 inline-block">這是為了在您手機上進行解密</span>
+                            </p>
+                        </div>
+                        <div class="relative pl-8 border-l-2 border-transparent">
+                            <div class="absolute -left-[9px] top-0 w-4 h-4 rounded-full bg-brand-blue border-4 border-white shadow"></div>
+                            <h4 class="font-bold text-brand-blue">點擊連結 (Connect)</h4>
+                            <p class="text-sm text-slate-500 mt-1">設定完成！下次開啟會自動進入登入畫面。</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="bg-white rounded-3xl p-8 md:p-12 border border-slate-200 shadow-xl">
+                <div class="text-center max-w-2xl mx-auto mb-12">
+                    <h2 class="text-3xl font-bold text-slate-900 mb-4">掌握學習狀況</h2>
+                    <p class="text-slate-600">
+                        登入後，您可以清楚看到每一科的成績，以及自己在班級中的落點分析。
+                    </p>
+                </div>
+
+                <div class="grid md:grid-cols-3 gap-8">
+                    <div class="text-center p-6 rounded-2xl hover:bg-slate-50 transition">
+                        <div class="w-16 h-16 mx-auto bg-green-100 text-green-600 rounded-2xl flex items-center justify-center text-3xl mb-4">
+                            <i class="fa-solid fa-user-check"></i>
+                        </div>
+                        <h3 class="font-bold text-slate-900 mb-2">安全登入</h3>
+                        <p class="text-sm text-slate-500">
+                            輸入座號與個人密碼。<br>
+                            預設密碼：<code>student + 座號</code>
+                        </p>
+                    </div>
+                    <div class="text-center p-6 rounded-2xl hover:bg-slate-50 transition">
+                        <div class="w-16 h-16 mx-auto bg-blue-100 text-blue-600 rounded-2xl flex items-center justify-center text-3xl mb-4">
+                            <i class="fa-solid fa-list-check"></i>
+                        </div>
+                        <h3 class="font-bold text-slate-900 mb-2">成績卡片</h3>
+                        <p class="text-sm text-slate-500">
+                            紅字提醒不及格科目。<br>一目了然的總分與平均。
+                        </p>
+                    </div>
+                    <div class="text-center p-6 rounded-2xl hover:bg-slate-50 transition">
+                        <div class="w-16 h-16 mx-auto bg-purple-100 text-purple-600 rounded-2xl flex items-center justify-center text-3xl mb-4">
+                            <i class="fa-solid fa-chart-pie"></i>
+                        </div>
+                        <h3 class="font-bold text-slate-900 mb-2">五標分析</h3>
+                        <p class="text-sm text-slate-500">
+                            點擊科目查看詳細圖表。<br>了解您的分數位於頂標或均標。
+                        </p>
+                    </div>
+                </div>
+            </div>
+
+        </div>
+
+    </div>
+
+    <script>
+        function setRole(role) {
+            // Update Buttons
+            document.querySelectorAll('.role-btn').forEach(btn => btn.classList.remove('active'));
+            document.getElementById(`btn-${role}`).classList.add('active');
+
+            // Update Sections
+            document.querySelectorAll('.role-section').forEach(sec => sec.classList.remove('active'));
+            document.getElementById(`section-${role}`).classList.add('active');
+        }
+
+        // Initialize (Show Teacher by default)
+        setRole('teacher');
+    </script>
+
+</body>
+</html>

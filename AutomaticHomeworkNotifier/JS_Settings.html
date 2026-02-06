@@ -33,6 +33,19 @@
     function renderSettingsList() { 
         renderSettingsView(); 
         loadStorageConfig(); // 每次進入設定頁面時順便讀取資料夾設定
+        refreshPendingList(); // 每次進入此頁面，自動掃描待處理檔案
+    }
+
+    function refreshPendingList() {
+        // 如果想讓使用者感覺到正在讀取，可以先顯示 Loading，但為了體驗順暢通常靜默更新
+        // document.getElementById('pending-list').innerHTML = '讀取中...'; 
+        
+        google.script.run.withSuccessHandler(files => {
+            // 更新全域資料
+            appData.pendingFiles = files;
+            // 重新渲染介面 (這樣黃色卡片就會跳出來了)
+            renderSettingsView();
+        }).apiGetPendingFiles();
     }
 
     function renderSettingsView() {
@@ -266,7 +279,7 @@
            renderSettingsView();
            if(typeof renderDashboardPicker === 'function') renderDashboardPicker(); 
            showToast("成功", "連結設定已儲存", "success",1000);
-       }).apiSaveAllData(appData.subjectClasses, appData.homeroomClasses);
+       }).apiSaveAllData(appData.subjectClasses, appData.homeroomClasses, appData.pendingFiles);
     }
 
     function delConf(name, role) {
@@ -276,13 +289,14 @@
        google.script.run.withSuccessHandler(() => {
            renderSettingsView();
            if(typeof renderDashboardPicker === 'function') renderDashboardPicker();
-       }).apiSaveAllData(appData.subjectClasses, appData.homeroomClasses);
+       }).apiSaveAllData(appData.subjectClasses, appData.homeroomClasses, appData.pendingFiles);
     }
 
     function removePending(i) { 
         if(confirm("移除此待處理項目？")) { 
             appData.pendingFiles.splice(i, 1); 
             renderSettingsView(); 
+            google.script.run.apiSaveAllData(appData.subjectClasses, appData.homeroomClasses, appData.pendingFiles);
         } 
     }
 
@@ -290,21 +304,58 @@
     // 4. 批次設定邏輯
     // ==========================================
     function openBatchConfigModal() {
+       // 1. 先顯示 Modal 並顯示讀取中動畫
+       document.getElementById('batch-config-modal').classList.remove('hidden');
+       const tbody = document.getElementById('batch-config-tbody'); 
+       tbody.innerHTML = '<tr><td colspan="7" class="text-center py-10 text-slate-400"><i class="fa-solid fa-spinner fa-spin mr-2"></i>正在同步待處理項目...</td></tr>';
+
+       // 2. 呼叫後端取得最新 pending list (確保剛建立的檔案會出現)
+       google.script.run.withSuccessHandler(pendingFiles => {
+           // 更新前端的全域變數
+           appData.pendingFiles = pendingFiles || [];
+           // 重新渲染設定頁面的黃色卡片區 (背景同步更新)
+           renderSettingsView(); 
+           // 開始渲染批次表格
+           renderBatchRows(); 
+       }).apiGetPendingFiles();
+    }
+
+    function renderBatchRows() {
+       const tbody = document.getElementById('batch-config-tbody'); 
+       tbody.innerHTML = "";
+
        const allItems = [
           ...appData.pendingFiles.map(f => ({...f, origin: 'pending', role: appData.mode, days: 7, cc: '', targets: []})),
           ...appData.subjectClasses.map(c => ({...c, origin: 'subject', role: 'subject'})),
           ...appData.homeroomClasses.map(c => ({...c, origin: 'homeroom', role: 'homeroom'}))
        ];
-       if (allItems.length === 0) return showToast("提示", "無資料", "warning",5000);
-       document.getElementById('batch-config-modal').classList.remove('hidden');
-       const tbody = document.getElementById('batch-config-tbody'); tbody.innerHTML = "";
+
+       if (allItems.length === 0) {
+           tbody.innerHTML = '<tr><td colspan="7" class="text-center py-8 text-slate-400 text-xs">目前沒有任何設定資料</td></tr>';
+           return;
+       }
+
        allItems.forEach((c, idx) => {
           const tr = document.createElement('tr');
           tr.className = c.origin === 'pending' ? "bg-amber-50" : "hover:bg-slate-50";
-          let displayName = c.name || c.title;
-          if(c.origin === 'pending') { const match = c.title.match(/(\d+)$/); if(match) displayName = match[1]; }
+          
+          // ★★★ [修正錯誤點] ★★★
+          // 確保不會因為找不到 title 而報錯。優先使用 name，若無則用 title，再沒有就給空字串。
+          const rawName = c.name || c.title || "";
+          let displayName = rawName;
+          
+          // 如果是待處理檔案，且檔名結尾有數字(例如：國文_801)，自動抓取 "801" 當作顯示名稱
+          if(c.origin === 'pending') { 
+              const match = rawName.match(/(\d+)$/); 
+              if(match) displayName = match[1]; 
+          }
+          
           const isSub = (c.origin === 'subject') || (c.origin === 'pending' && c.role === 'subject');
           const isHome = (c.origin === 'homeroom') || (c.origin === 'pending' && c.role === 'homeroom');
+          
+          // 確保 targets 是陣列 (防呆)
+          const targets = c.targets || [];
+
           tr.innerHTML = `
              <td class="p-3 text-slate-400 text-center text-xs">${idx + 1}</td>
              <td class="p-3 text-xs text-slate-500">${c.origin === 'pending' ? '待處理' : (c.origin==='subject'?'任課':'導師')}</td>
@@ -312,21 +363,34 @@
                 <label><input type="checkbox" class="batch-role-s w-4 h-4 text-blue-600 rounded" ${isSub?'checked':''}> <span class="text-blue-700 font-bold text-xs">任課</span></label>
                 <label><input type="checkbox" class="batch-role-h w-4 h-4 text-purple-600 rounded" ${isHome?'checked':''}> <span class="text-purple-700 font-bold text-xs">導師</span></label>
              </div></td>
-             <td class="p-3"><input class="cfg-name border border-slate-300 rounded px-2 py-1 w-full font-bold text-slate-700" value="${displayName}"><input type="hidden" class="cfg-url" value="${c.url}"></td>
+             <td class="p-3">
+                <input class="cfg-name border border-slate-300 rounded px-2 py-1 w-full font-bold text-slate-700" value="${displayName}">
+                <input type="hidden" class="cfg-url" value="${c.url}">
+             </td>
              <td class="p-3"><input type="number" class="cfg-days w-16 border rounded p-1 text-center" value="${c.days}"></td>
              <td class="p-3"><input type="text" class="cfg-cc w-full border rounded p-1 text-xs" value="${c.cc || ''}"></td>
              <td class="p-3"><div class="tag-container" onclick="focusTagInput(this)"><input type="text" class="tag-input" placeholder="輸入..." onkeydown="handleTagKey(event)"></div></td>`;
+          
           tbody.appendChild(tr);
+          
+          // 恢復標籤功能
           const container = tr.querySelector('.tag-container');
-          if(c.targets) c.targets.forEach(t => addTag(container, t));
+          targets.forEach(t => addTag(container, t));
        });
     }
 
     function saveBatchConfigs() {
        const rows = document.querySelectorAll('#batch-config-tbody tr');
        let newSubjectList = [], newHomeroomList = [];
+       
        rows.forEach(tr => {
-          const name = tr.querySelector('.cfg-name').value.trim(); if(!name) return;
+          // 略過沒有 input 的列 (例如 "無資料" 的提示列)
+          const nameInput = tr.querySelector('.cfg-name');
+          if (!nameInput) return;
+
+          const name = nameInput.value.trim(); 
+          if(!name) return;
+          
           const isSub = tr.querySelector('.batch-role-s').checked;
           const isHome = tr.querySelector('.batch-role-h').checked;
           const url = tr.querySelector('.cfg-url').value;
@@ -334,18 +398,30 @@
           const cc = tr.querySelector('.cfg-cc').value;
           const targets = Array.from(tr.querySelectorAll('.tag-chip')).map(chip => chip.dataset.val);
           const item = { name, url, days, cc, targets };
+          
           if(isSub) newSubjectList.push(item);
           if(isHome) newHomeroomList.push(item);
        });
-       const btn = document.getElementById('btn-save-batch-cfg'); btn.innerText = "儲存中..."; btn.disabled = true;
+       
+       const btn = document.getElementById('btn-save-batch-cfg'); 
+       const orgHtml = btn.innerHTML;
+       btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin mr-2"></i>儲存中...'; 
+       btn.disabled = true;
+       
        google.script.run.withSuccessHandler(res => {
-          btn.innerHTML = '<i class="fa-solid fa-floppy-disk mr-2"></i> 儲存所有變更'; btn.disabled = false;
+          btn.innerHTML = orgHtml; 
+          btn.disabled = false;
+          
           document.getElementById('batch-config-modal').classList.add('hidden');
-          appData.subjectClasses = newSubjectList; appData.homeroomClasses = newHomeroomList; appData.pendingFiles = [];
+          
+          appData.subjectClasses = newSubjectList; 
+          appData.homeroomClasses = newHomeroomList; 
+          appData.pendingFiles = []; // 批次處理完後，清空待處理
+          
           renderSettingsView(); 
           if(typeof renderDashboardPicker === 'function') renderDashboardPicker();
-          showToast("成功", "已更新資料庫", "success",1000);
-       }).apiSaveAllData(newSubjectList, newHomeroomList);
+          showToast("成功", "已更新資料庫", "success", 1000);
+       }).apiSaveAllData(newSubjectList, newHomeroomList, []); // 傳入空陣列以清空後端待處理清單
     }
 
     // ==========================================

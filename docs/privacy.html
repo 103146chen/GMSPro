@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>隱私權政策 | GMSPro</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&family=Noto+Sans+TC:wght@300;400;500;700&display=swap" rel="stylesheet">
+</head>
+<body class="bg-slate-50 text-slate-800 font-sans antialiased">
+
+    <nav class="bg-white border-b border-slate-200">
+        <div class="max-w-4xl mx-auto px-6 h-16 flex justify-between items-center">
+            <a href="index.html" class="flex items-center gap-2 font-bold text-slate-700 hover:text-blue-600 transition">
+                <i class="fa-solid fa-arrow-left"></i> 返回首頁
+            </a>
+            <span class="text-slate-400 text-sm">GMSPro Legal</span>
+        </div>
+    </nav>
+
+    <div class="max-w-3xl mx-auto px-6 py-16">
+        <h1 class="text-3xl font-extrabold text-slate-900 mb-2">隱私權政策 (Privacy Policy)</h1>
+        <p class="text-slate-500 text-sm mb-10">最後更新日期：2026年2月</p>
+
+        <div class="space-y-10 text-slate-700 leading-relaxed">
+            
+            <section>
+                <h2 class="text-xl font-bold text-slate-900 mb-4 flex items-center gap-2">
+                    <i class="fa-solid fa-shield-halved text-blue-600"></i> 1. 資料所有權聲明
+                </h2>
+                <p>GMSPro 是一套開源的 Google Apps Script 解決方案。與傳統 SaaS 服務不同，<strong>我們（開發者）不會、也無法存取您的任何資料。</strong></p>
+                <ul class="list-disc list-inside mt-4 space-y-2 bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
+                    <li>所有學生成績、名單、Email 皆儲存在<strong>您個人的 Google Sheets</strong> 中。</li>
+                    <li>所有程式碼皆運行在<strong>您個人的 Google 帳號</strong>下。</li>
+                    <li>我們沒有後台資料庫，您的資料完全由您自己掌控。</li>
+                </ul>
+            </section>
+
+            <section>
+                <h2 class="text-xl font-bold text-slate-900 mb-4">2. 資料收集與使用</h2>
+                <p class="mb-4">本系統僅在您觸發或設定排程時執行，並僅用於以下目的：</p>
+                <ul class="list-disc list-inside space-y-1 text-slate-600 ml-4">
+                    <li>讀取您指定的 Google Sheets 以計算成績。</li>
+                    <li>透過您的 Gmail 帳號發送成績通知信。</li>
+                    <li>驗證學生/家長的登入密碼（雜湊值比對）。</li>
+                </ul>
+            </section>
+
+            <section>
+                <h2 class="text-xl font-bold text-slate-900 mb-4">3. 第三方服務與權限</h2>
+                <p>本系統運作依賴 Google Workspace 服務。初次使用時，Google 會要求您授權以下權限：</p>
+                <div class="mt-4 grid gap-3">
+                    <div class="flex gap-3 items-start">
+                        <span class="bg-slate-200 text-slate-600 px-2 py-1 rounded text-xs font-mono">https://www.googleapis.com/auth/spreadsheets</span>
+                        <span class="text-sm">用於讀寫成績紀錄表。</span>
+                    </div>
+                    <div class="flex gap-3 items-start">
+                        <span class="bg-slate-200 text-slate-600 px-2 py-1 rounded text-xs font-mono">https://www.googleapis.com/auth/gmail.send</span>
+                        <span class="text-sm">用於寄送缺勤通知信。</span>
+                    </div>
+                </div>
+            </section>
+
+            <section>
+                <h2 class="text-xl font-bold text-slate-900 mb-4">4. 免責聲明</h2>
+                <p>本軟體依據 <strong>GNU AGPLv3</strong> 授權發布。軟體按「原樣」提供，不提供任何形式的擔保。開發者不對因使用本軟體而導致的任何資料遺失或損害負責。建議使用者定期備份 Google Sheets 資料。</p>
+            </section>
+
+        </div>
+    </div>
+
+    <footer class="border-t border-slate-200 py-8 text-center text-slate-400 text-xs">
+        &copy; 2026 GMSPro Team.
+    </footer>
+
+</body>
+</html>

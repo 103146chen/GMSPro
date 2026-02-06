@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+<html lang="zh-TW" class="scroll-smooth">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>深度功能解析 | GMSPro</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;800&family=Noto+Sans+TC:wght@300;400;500;700&display=swap" rel="stylesheet">
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: { sans: ['Inter', 'Noto Sans TC', 'sans-serif'] },
+                    colors: { brand: { blue: '#2563EB', purple: '#9333EA', dark: '#0F172A' } }
+                }
+            }
+        }
+    </script>
+</head>
+<body class="bg-white text-slate-800 antialiased font-sans">
+
+    <nav class="fixed w-full z-50 bg-white/90 backdrop-blur-md border-b border-slate-100">
+        <div class="max-w-7xl mx-auto px-6 h-16 flex justify-between items-center">
+            <a href="index.html" class="flex items-center gap-2 group">
+                <div class="bg-brand-blue text-white w-8 h-8 rounded-lg flex items-center justify-center font-bold text-lg shadow-lg group-hover:scale-110 transition">G</div>
+                <span class="font-bold text-lg tracking-tight text-slate-800">GMSPro</span>
+            </a>
+            <div class="hidden md:flex items-center gap-8 text-sm font-medium text-slate-500">
+                <a href="index.html" class="hover:text-brand-blue transition">首頁</a>
+                <a href="#" class="text-brand-blue font-bold">功能介紹</a>
+                <a href="usage.html" class="hover:text-brand-blue transition">使用手冊</a>
+                <a href="tutorial.html" class="bg-slate-900 text-white px-5 py-2 rounded-full hover:bg-brand-blue transition shadow-lg flex items-center gap-2">
+                    <i class="fa-solid fa-download"></i> 安裝
+                </a>
+            </div>
+        </div>
+    </nav>
+
+    <header class="pt-32 pb-16 px-6 text-center bg-slate-50">
+        <h1 class="text-4xl font-extrabold text-slate-900 mb-4">系統核心架構解析</h1>
+        <p class="text-lg text-slate-500 max-w-2xl mx-auto">
+            深入了解 GMSPro 的運作邏輯，從底層資料庫設計到前端互動體驗。
+        </p>
+    </header>
+
+    <section id="gradeflow" class="py-20 px-6 border-t border-slate-200 scroll-mt-16">
+        <div class="max-w-7xl mx-auto">
+            <div class="flex items-center gap-4 mb-12">
+                <div class="w-12 h-12 bg-blue-100 text-blue-600 rounded-xl flex items-center justify-center text-2xl">
+                    <i class="fa-solid fa-graduation-cap"></i>
+                </div>
+                <div>
+                    <h2 class="text-3xl font-bold text-slate-900">GradeFlow 成績系統</h2>
+                    <p class="text-slate-500">基於 Google Sheets 的輕量化資料庫架構</p>
+                </div>
+            </div>
+
+            <div class="grid lg:grid-cols-2 gap-12 items-start">
+                <div class="space-y-10">
+                    <div>
+                        <h3 class="text-xl font-bold text-slate-800 flex items-center gap-2">
+                            <i class="fa-solid fa-eye text-blue-500"></i> 雙模視角 (Dual View Mode)
+                        </h3>
+                        <p class="text-slate-600 mt-2 leading-relaxed">
+                            系統內建兩種顯示模式，滿足不同角色的需求：
+                        </p>
+                        <ul class="mt-3 space-y-2 text-sm text-slate-600 border-l-2 border-blue-100 pl-4">
+                            <li><strong class="text-blue-700">任課模式 (Subject Mode):</strong> 藍色系介面。專注於單一科目的成績錄入與查詢，適合科任老師。</li>
+                            <li><strong class="text-purple-700">導師模式 (Homeroom Mode):</strong> 紫色系介面。整合全班所有科目的總覽，包含缺勤統計與總排名，適合班級導師。</li>
+                        </ul>
+                    </div>
+                    
+                    <div>
+                        <h3 class="text-xl font-bold text-slate-800 flex items-center gap-2">
+                            <i class="fa-solid fa-chart-bar text-blue-500"></i> 五標運算引擎
+                        </h3>
+                        <p class="text-slate-600 mt-2">
+                            不同於單純的平均分，GradeFlow 核心演算法參考大考中心標準，自動計算班級的 <code class="bg-slate-100 px-1 rounded text-xs font-mono text-red-500">頂/前/均/後/底</code> 五項指標。這能更客觀地反映學生的成績落點，而非僅僅是分數高低。
+                        </p>
+                    </div>
+
+                    <div>
+                        <h3 class="text-xl font-bold text-slate-800 flex items-center gap-2">
+                            <i class="fa-solid fa-database text-blue-500"></i> 三層資料庫架構
+                        </h3>
+                        <p class="text-slate-600 mt-2">
+                            為了確保效能與安全性，我們將資料儲存分為三層：
+                        </p>
+                        <div class="mt-3 grid grid-cols-3 gap-2 text-center text-xs">
+                            <div class="bg-slate-100 p-2 rounded">
+                                <div class="font-bold text-slate-700">DB_Source</div>
+                                <div class="text-slate-500">原始成績</div>
+                            </div>
+                            <div class="bg-slate-100 p-2 rounded">
+                                <div class="font-bold text-slate-700">DB_Auth</div>
+                                <div class="text-slate-500">權限帳密</div>
+                            </div>
+                            <div class="bg-slate-100 p-2 rounded">
+                                <div class="font-bold text-slate-700">DB_Cache</div>
+                                <div class="text-slate-500">統計快取</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="bg-slate-50 rounded-2xl p-8 border border-slate-200 h-full flex flex-col justify-center items-center text-center">
+                    <div class="w-full max-w-sm bg-white rounded-xl shadow-lg border border-slate-100 overflow-hidden mb-4">
+                        <div class="bg-blue-600 h-2 w-full"></div>
+                        <div class="p-4">
+                            <div class="flex justify-between items-center mb-4">
+                                <div class="h-4 w-24 bg-slate-200 rounded"></div>
+                                <div class="h-8 w-8 bg-slate-100 rounded-full"></div>
+                            </div>
+                            <div class="space-y-2">
+                                <div class="h-16 bg-blue-50 rounded-lg border border-blue-100 flex items-center justify-center text-blue-300 font-bold">Dashboard UI</div>
+                                <div class="h-16 bg-slate-50 rounded-lg"></div>
+                            </div>
+                        </div>
+                    </div>
+                    <p class="text-sm text-slate-400">RWD 響應式介面示意圖</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <section id="notifier" class="py-20 px-6 bg-slate-50 scroll-mt-16">
+        <div class="max-w-7xl mx-auto">
+            <div class="flex items-center gap-4 mb-12 flex-row-reverse text-right justify-end">
+                <div>
+                    <h2 class="text-3xl font-bold text-slate-900">Notifier 缺勤機器人</h2>
+                    <p class="text-slate-500">GAS 自動化觸發與郵件派送系統</p>
+                </div>
+                <div class="w-12 h-12 bg-purple-100 text-purple-600 rounded-xl flex items-center justify-center text-2xl">
+                    <i class="fa-solid fa-robot"></i>
+                </div>
+            </div>
+
+            <div class="grid lg:grid-cols-2 gap-12 items-start">
+                <div class="order-2 lg:order-1 bg-white rounded-2xl p-8 border border-slate-200 h-full flex flex-col justify-center items-center text-center">
+                    <div class="w-full max-w-sm bg-white rounded-xl shadow-lg border border-slate-100 p-6 text-left">
+                        <div class="flex items-center gap-3 mb-4 border-b pb-3">
+                            <div class="w-8 h-8 bg-red-100 rounded-full flex items-center justify-center text-red-500"><i class="fa-solid fa-triangle-exclamation"></i></div>
+                            <div>
+                                <div class="text-sm font-bold text-slate-800">缺交作業通知</div>
+                                <div class="text-xs text-slate-400">寄件者: 自動通知系統</div>
+                            </div>
+                        </div>
+                        <div class="space-y-2">
+                            <div class="h-2 w-3/4 bg-slate-100 rounded"></div>
+                            <div class="h-2 w-full bg-slate-100 rounded"></div>
+                            <div class="h-2 w-5/6 bg-slate-100 rounded"></div>
+                        </div>
+                        <div class="mt-4 bg-red-50 p-3 rounded text-xs text-red-700 font-mono">
+                            檢測到關鍵字: "缺"<br>
+                            作業: L3 習作<br>
+                            日期: 2026/02/02
+                        </div>
+                    </div>
+                    <p class="text-sm text-slate-400 mt-4">自動化郵件範例</p>
+                </div>
+
+                <div class="space-y-10 order-1 lg:order-2">
+                    <div>
+                        <h3 class="text-xl font-bold text-slate-800 flex items-center gap-2">
+                            <i class="fa-solid fa-calendar-check text-purple-500"></i> 智慧日期過濾 (Smart Date Filter)
+                        </h3>
+                        <p class="text-slate-600 mt-2">
+                            機器人核心 (<code>Main.js</code>) 內建防呆機制。掃描時會自動讀取試算表的第一列日期：
+                        </p>
+                        <ul class="mt-2 space-y-1 text-sm text-slate-600">
+                            <li><i class="fa-solid fa-check text-green-500 mr-2"></i> <strong>過去日期：</strong> 執行掃描與通知。</li>
+                            <li><i class="fa-solid fa-ban text-slate-400 mr-2"></i> <strong>未來日期：</strong> 自動略過，避免誤判。</li>
+                        </ul>
+                    </div>
+                    
+                    <div>
+                        <h3 class="text-xl font-bold text-slate-800 flex items-center gap-2">
+                            <i class="fa-solid fa-magnifying-glass text-purple-500"></i> 自定義關鍵字偵測
+                        </h3>
+                        <p class="text-slate-600 mt-2">
+                            系統預設掃描儲存格內的 <code>缺</code>、<code>x</code> 等關鍵字。您可以在設定頁面中自定義這些觸發詞，支援模糊比對，無論是「缺交」或「未帶」都能精準捕捉。
+                        </p>
+                    </div>
+
+                    <div>
+                        <h3 class="text-xl font-bold text-slate-800 flex items-center gap-2">
+                            <i class="fa-solid fa-wand-magic-sparkles text-purple-500"></i> Creator 建班工具
+                        </h3>
+                        <p class="text-slate-600 mt-2">
+                            這是專為 <code>View_Creator.html</code> 設計的前端工具。您不需要手動在 Google Sheets 調整欄寬或格式，只要將 Excel 名單貼上，系統會自動透過 GAS 後端生成完美的標準格式試算表。
+                        </p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <footer class="bg-white border-t border-slate-200 py-12 text-center text-slate-400 text-sm">
+        &copy; 2026 GMSPro Team.
+    </footer>
+
+</body>
+</html>
