@@ -34,7 +34,7 @@ function apiLogin(seatNo, password) {
   try {
     const props = PropertiesService.getScriptProperties();
     const DB_URL = props.getProperty("DB_URL");
-    const SYSTEM_SALT = props.getProperty("SYSTEM_SALT"); // 直接取得 Salt
+    const SYSTEM_SALT = props.getProperty("SYSTEM_SALT"); 
 
     if(!DB_URL) return { success: false, msg: "系統未設定資料庫連結" };
 
@@ -42,20 +42,26 @@ function apiLogin(seatNo, password) {
     try { ss = SpreadsheetApp.openByUrl(DB_URL); } 
     catch(e) { return { success: false, msg: "無法開啟資料庫" }; }
     
-    const FILE_ID = ss.getId(); // 取得檔案 ID 作為基礎金鑰的一部分
+    const FILE_ID = ss.getId(); 
 
-    // 1. 驗證身分 (Auth)
+    // --- 0. 資料正規化 ---
+    // 強制將輸入座號補零 (例如 "5" -> "05")
+    let targetSeat = String(seatNo).trim();
+    if (targetSeat.length < 2) targetSeat = "0" + targetSeat;
+
+    // --- 1. 驗證身分 (Auth) ---
     const authSheet = ss.getSheetByName("DB_Auth");
     if(!authSheet) return { success: false, msg: "資料庫結構錯誤 (Auth)" };
     
     const authData = authSheet.getDataRange().getDisplayValues(); 
     let isValid = false;
     let role = ""; 
-    const targetSeat = String(seatNo).trim();
     const inputHash = hashPassword_(password); 
 
     for(let i=1; i<authData.length; i++) {
-      const dbSeat = String(authData[i][0] || "").trim();
+      let dbSeat = String(authData[i][0] || "").trim();
+      if (dbSeat.length < 2) dbSeat = "0" + dbSeat; // DB 側也強制補零
+      
       if(dbSeat === targetSeat) {
         const sHash = String(authData[i][1] || "").trim();
         const pHash = String(authData[i][2] || "").trim();
@@ -67,9 +73,15 @@ function apiLogin(seatNo, password) {
 
     if (!isValid) return { success: false, msg: "座號或密碼錯誤" };
 
-    // 2. 讀取並解密成績
+    // --- 2. 讀取並解密成績 (Source) ---
     const sourceSheet = ss.getSheetByName("DB_Source");
-    if (!sourceSheet) return { success: false, msg: "資料庫無成績資料" };
+    // 若無成績表，直接回傳空資料
+    if (!sourceSheet) {
+         return sanitizeResponse_({ 
+            success: true, role: role, seat: targetSeat, 
+            name: "座號 " + targetSeat, payload: [], time: "尚無資料"
+        });
+    }
 
     const sourceData = sourceSheet.getDataRange().getValues();
     let studentName = "";
@@ -77,31 +89,35 @@ function apiLogin(seatNo, password) {
     let timeStr = ""; 
     
     for(let i=1; i<sourceData.length; i++) {
-       const rowSeat = String(sourceData[i][0]).trim();
+       let rowSeat = String(sourceData[i][0]).trim();
+       if (rowSeat.length < 2) rowSeat = "0" + rowSeat; // DB 側補零
        
        if(rowSeat === targetSeat) {
-          if(!studentName) studentName = String(sourceData[i][1] || "");
-          
+          // 取得時間 (若尚未取得)
           if(!timeStr) {
-             const rawTime = sourceData[i][5];
-             timeStr = (rawTime instanceof Date) ? Utilities.formatDate(rawTime, "GMT+8", "yyyy/MM/dd HH:mm") : String(rawTime || "");
+             const rawTime = sourceData[i][2]; 
+             // 簡易轉型，後續 sanitizeResponse_ 會做更完整的處理
+             if (rawTime instanceof Date) {
+                 timeStr = Utilities.formatDate(rawTime, "GMT+8", "yyyy/MM/dd HH:mm");
+             } else {
+                 timeStr = String(rawTime || "").trim();
+             }
           }
 
-          const subjectName = String(sourceData[i][2] || "");
-          const taskName = String(sourceData[i][3] || "");
-          const encryptedBlob = String(sourceData[i][4] || "");
+          const encryptedBlob = String(sourceData[i][1] || ""); 
 
           try {
-             // ★★★ 修改：傳入 SYSTEM_SALT 與 FILE_ID，讓函式自己去算這一行的 Key ★★★
+             // 解密
              const jsonStr = cipherData_(encryptedBlob, false, SYSTEM_SALT, FILE_ID);
              
-             if(jsonStr) {
-                 // 這裡不再需要 substring(8)，因為 cipherData_ 已經處理完 IV 了
+             if(jsonStr && jsonStr.startsWith("{")) {
                  const record = JSON.parse(jsonStr);
                  
+                 if (!studentName && record.nm) studentName = record.nm;
+
                  combinedPayload.push({
-                     subject: subjectName,
-                     task: taskName,
+                     subject: record.sb, 
+                     task: record.tk,   
                      score: record.sc,
                      rank: record.rk,
                      stats: record.st,
@@ -110,32 +126,52 @@ function apiLogin(seatNo, password) {
                  });
              }
           } catch(err) { 
-             console.error("解密失敗 (Row " + (i+1) + ")"); 
+             // 生產環境：解密失敗時僅在後台記錄，不回傳給前端
+             console.error(`Row ${i+1} 解密失敗: ${err.toString()}`); 
           }
        }
     }
 
-    if(combinedPayload.length === 0) {
-        return { 
-            success: true, 
-            role: role, 
-            seat: targetSeat, 
-            name: studentName || "同學", 
-            payload: [], 
-            time: timeStr || "無資料"
-        };
-    }
+    const displayName = studentName || ("座號 " + targetSeat);
 
-    return { 
+    // --- 3. 最終回傳 (經過清洗，防止 Date 物件導致 Crash) ---
+    const response = { 
       success: true, 
       role: role, 
       seat: targetSeat, 
-      name: studentName, 
+      name: displayName, 
       payload: combinedPayload, 
-      time: timeStr 
+      time: timeStr || "無資料"
     };
 
-  } catch(e) { return { success: false, msg: "系統錯誤: " + e.toString() }; }
+    return sanitizeResponse_(response);
+
+  } catch(e) { 
+    return { success: false, msg: "系統錯誤，請稍後再試。" }; 
+  }
+}
+
+function sanitizeResponse_(data) {
+  if (data === null) return null;
+  if (data === undefined) return null;
+  
+  if (data instanceof Date) {
+    return Utilities.formatDate(data, "GMT+8", "yyyy/MM/dd HH:mm:ss");
+  }
+  
+  if (Array.isArray(data)) {
+    return data.map(item => sanitizeResponse_(item));
+  }
+  
+  if (typeof data === 'object') {
+    const cleanObj = {};
+    for (const key in data) {
+      cleanObj[key] = sanitizeResponse_(data[key]);
+    }
+    return cleanObj;
+  }
+  
+  return data;
 }
 
 function apiChangePassword(seatNo, oldPwd, newPwd) {

@@ -40,12 +40,15 @@ function apiSyncToDatabase(dbUrl) {
     SpreadsheetApp.flush(); 
 
     let sourceRows = [];
-    sourceRows.push(["座號", "姓名", "科目", "作業名稱", "加密數據 (Score/Rank/Stats)", "更新時間"]);
+    sourceRows.push(["座號", "加密數據 (Payload)", "更新時間"]);
     
     const nowStr = Utilities.formatDate(new Date(), "GMT+8", "yyyy/MM/dd HH:mm");
     
     masterData.forEach(item => {
         let sensitivePayload = {
+            sb: item.subject, 
+            tk: item.task,   
+            nm: item.name,   
             sc: item.score,
             rk: item.rank,
             st: item.stats,
@@ -59,20 +62,17 @@ function apiSyncToDatabase(dbUrl) {
 
         sourceRows.push([
             String(item.seatNo), 
-            item.name, 
-            item.subject, 
-            item.task, 
             encryptedPayload, 
             nowStr
         ]);
     });
 
     if (sourceRows.length > 0) {
-        sourceSheet.getRange(1, 1, sourceRows.length, sourceRows[0].length).setValues(sourceRows);
+        sourceSheet.getRange(1, 1, sourceRows.length, 3).setValues(sourceRows);
     }
     
     // 格式美化
-    sourceSheet.getRange("A1:F1").setBackground("#e2e8f0").setFontWeight("bold");
+    sourceSheet.getRange("A1:C1").setBackground("#e2e8f0").setFontWeight("bold");
     sourceSheet.setFrozenRows(1);
 
     writeLog(dbUrl, `同步成功：覆蓋更新 ${masterData.length} 筆資料`);
@@ -85,7 +85,7 @@ function apiSyncToDatabase(dbUrl) {
 function updateAuthDatabase_(ss, masterData) {
   let authSheet = ss.getSheetByName("DB_Auth");
   
-  // 自動備份機制
+  // 自動備份機制 (保持不變)
   if (authSheet && authSheet.getLastRow() > 1) {
       let backupSheet = ss.getSheetByName("Backup_Auth");
       if (!backupSheet) {
@@ -99,40 +99,50 @@ function updateAuthDatabase_(ss, masterData) {
 
   if (!authSheet) {
       authSheet = ss.insertSheet("DB_Auth");
-      authSheet.getRange(1, 1, 1, 4).setValues([["座號 (Key)", "學生密碼(Hash)", "家長密碼(Hash)", "姓名 (Ref)"]]);
+      // ★★★ 修改：標題列移除「姓名」 ★★★
+      authSheet.getRange(1, 1, 1, 3).setValues([["座號 (Key)", "學生密碼(Hash)", "家長密碼(Hash)"]]);
       authSheet.setFrozenRows(1);
   }
 
+  // 取得既有的密碼對應表 (現在改用 座號 當 Key)
   const oldCredentials = getExistingAuthMap_(ss);
-  const currentStudents = new Map();
+  
+  // 整理目前的學生名單 (masterData 已經去重過)
+  // 我們只需要座號，因為這裡不存姓名了
+  const currentSeats = new Set();
   masterData.forEach(d => {
       const seat = String(d.seatNo).trim();
-      const name = String(d.name).trim();
-      if(seat && name) currentStudents.set(seat, name);
+      if(seat) currentSeats.add(seat);
   });
 
   let newRows = [];
-  const sortedSeats = Array.from(currentStudents.keys()).sort((a,b) => Number(a) - Number(b));
+  // 轉成陣列並排序
+  const sortedSeats = Array.from(currentSeats).sort((a,b) => Number(a) - Number(b));
 
   sortedSeats.forEach(seat => {
-      const name = currentStudents.get(seat);
       let sHash, pHash;
 
-      if (oldCredentials.has(name)) {
-          const creds = oldCredentials.get(name);
+      // 如果舊表有這個座號，就沿用舊密碼
+      if (oldCredentials.has(seat)) {
+          const creds = oldCredentials.get(seat);
           sHash = creds.s;
           pHash = creds.p;
       } else {
+          // 新座號，產生預設密碼
           const padSeat = seat.length < 2 ? "0" + seat : seat;
           sHash = hashPassword_("student" + padSeat);
           pHash = hashPassword_("parent" + padSeat);
       }
-      newRows.push([seat, sHash, pHash, name]);
+      
+      newRows.push([seat, sHash, pHash]);
   });
 
   const lastRow = authSheet.getLastRow();
-  if (lastRow > 1) authSheet.getRange(2, 1, lastRow - 1, 4).clearContent();
-  if (newRows.length > 0) authSheet.getRange(2, 1, newRows.length, 4).setValues(newRows);
+  // 清空舊資料 (避免欄位殘留)
+  if (lastRow > 1) authSheet.getRange(2, 1, lastRow - 1, authSheet.getLastColumn()).clearContent();
+  
+  // 寫入新資料 (只有 3 欄)
+  if (newRows.length > 0) authSheet.getRange(2, 1, newRows.length, 3).setValues(newRows);
 }
 
 function getExistingAuthMap_(ss) {
@@ -142,26 +152,15 @@ function getExistingAuthMap_(ss) {
 
   const authData = authSheet.getDataRange().getValues();
   
-  const sourceSheet = ss.getSheetByName("DB_Source");
-  const seatToName = {};
-  if (sourceSheet && sourceSheet.getLastRow() > 1) {
-      const sourceData = sourceSheet.getDataRange().getValues();
-      for (let i = 1; i < sourceData.length; i++) {
-          const s = String(sourceData[i][0]).trim();
-          const n = String(sourceData[i][1]).trim();
-          if (s && n) seatToName[s] = n;
-      }
-  }
-
+  // 從第 2 行開始讀 (跳過標題)
   for (let i = 1; i < authData.length; i++) {
       const row = authData[i];
-      const seat = String(row[0]).trim();
-      const sHash = row[1];
-      const pHash = row[2];
-      let name = (row.length > 3) ? String(row[3]).trim() : "";
-
-      if (!name && seatToName[seat]) name = seatToName[seat];
-      if (name) map.set(name, { s: sHash, p: pHash });
+      const seat = String(row[0]).trim(); // 第 1 欄是座號
+      const sHash = row[1];               // 第 2 欄是學生密碼
+      const pHash = row[2];               // 第 3 欄是家長密碼
+      
+      // 直接用座號記住密碼
+      if (seat) map.set(seat, { s: sHash, p: pHash });
   }
   return map;
 }
@@ -256,7 +255,9 @@ function apiFetchHomeroomMasterData_() {
             // --- 3. 讀取該欄成績 ---
             for(let r = headerRowIdx + 1; r < allValues.length; r++) {
                 const row = allValues[r];
-                const seatNo = String(row[colIdxSeat]).trim(); 
+                let rawSeat = String(row[colIdxSeat]).trim();
+                if (!rawSeat) continue;
+                const seatNo = rawSeat.length < 2 ? "0" + rawSeat : rawSeat;
                 
                 if (seatNo) {
                     let studentName = (colIdxName !== -1) ? row[colIdxName] : "";
