@@ -48,6 +48,7 @@
     }
 
     if (view === 'create_batch' && typeof checkBatchTableInit === 'function') checkBatchTableInit();
+    if (view === 'system' && typeof renderSystemView === 'function') renderSystemView();
    }
 
   // === v8.0 核心更新：讀取雙軌資料 ===

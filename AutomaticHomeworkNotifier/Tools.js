@@ -13,13 +13,13 @@ function getSheetList(url) {
 function getStudentMap(ss) {
   let configSheet = ss.getSheetByName("設定");
   if (!configSheet) configSheet = ss.getSheets()[0];
-  
+
   let map = {};
   if (configSheet) {
     const data = configSheet.getDataRange().getValues();
     let headerRow = 0;
-    for(let i=0; i<Math.min(5, data.length); i++) {
-        if(data[i].join("").includes("座號")) { headerRow = i; break; }
+    for (let i = 0; i < Math.min(5, data.length); i++) {
+      if (data[i].join("").includes("座號")) { headerRow = i; break; }
     }
     for (let i = headerRow + 1; i < data.length; i++) {
       const seat = String(data[i][0]);
@@ -33,30 +33,30 @@ function scanMissingAssignments(url, sheetName, validDays) {
   try {
     const ss = SpreadsheetApp.openByUrl(url);
     const sheet = ss.getSheetByName(sheetName);
-    if (!sheet) return { success:false, msg: `找不到分頁 [${sheetName}]` };
+    if (!sheet) return { success: false, msg: `找不到分頁 [${sheetName}]` };
 
     const lastCol = sheet.getLastColumn();
     const lastRow = sheet.getLastRow();
-    if (lastRow < 3) return { success:false, msg: "資料不足" };
+    if (lastRow < 3) return { success: false, msg: "資料不足" };
 
-    const dateRow = sheet.getRange(1, 1, 1, lastCol).getValues()[0]; 
+    const dateRow = sheet.getRange(1, 1, 1, lastCol).getValues()[0];
     const taskRow = sheet.getRange(2, 1, 1, lastCol).getValues()[0];
     const dataRange = sheet.getRange(3, 1, lastRow - 2, lastCol);
     const data = dataRange.getValues();
-    
+
     const studentMap = getStudentMap(ss);
     const today = new Date();
-    today.setHours(0,0,0,0); 
-    
-    let resultList = []; 
+    today.setHours(0, 0, 0, 0);
+
+    let resultList = [];
 
     data.forEach((row, rIndex) => {
       const seatNo = String(row[0]);
       const student = studentMap[seatNo];
       if (!student || !student.email) return;
 
-      let warningItems = []; 
-      let expiredItems = []; 
+      let warningItems = [];
+      let expiredItems = [];
       let currentRow = rIndex + 3;
 
       for (let j = 2; j < row.length; j++) {
@@ -68,21 +68,21 @@ function scanMissingAssignments(url, sheetName, validDays) {
         if (score === "" && taskName !== "") {
           if (taskDateObj instanceof Date) {
             let startDate = new Date(taskDateObj);
-            startDate.setHours(0,0,0,0); 
+            startDate.setHours(0, 0, 0, 0);
             if (today < startDate) continue;
 
             let deadline = new Date(taskDateObj);
             deadline.setDate(deadline.getDate() + parseInt(validDays));
-            deadline.setHours(0,0,0,0);
+            deadline.setHours(0, 0, 0, 0);
             let dateStr = Utilities.formatDate(taskDateObj, "GMT+8", "MM/dd");
             let cleanTask = taskName.toString();
 
             if (today <= deadline) {
-               let leftDays = Math.ceil((deadline - today) / (86400000));
-               warningItems.push({ date: dateStr, task: cleanTask, status: `剩 ${leftDays} 天` });
+              let leftDays = Math.ceil((deadline - today) / (86400000));
+              warningItems.push({ date: dateStr, task: cleanTask, status: `剩 ${leftDays} 天` });
             } else {
-               let overDays = Math.ceil((today - deadline) / (86400000));
-               expiredItems.push({ date: dateStr, task: cleanTask, status: `過期 ${overDays} 天`, row: currentRow, col: currentCol });
+              let overDays = Math.ceil((today - deadline) / (86400000));
+              expiredItems.push({ date: dateStr, task: cleanTask, status: `過期 ${overDays} 天`, row: currentRow, col: currentCol });
             }
           } else {
             warningItems.push({ date: "-", task: taskName.toString(), status: "請確認" });
@@ -94,19 +94,19 @@ function scanMissingAssignments(url, sheetName, validDays) {
       }
     });
     return { success: true, data: resultList };
-  } catch(e) { return { success: false, msg: e.toString() }; }
+  } catch (e) { return { success: false, msg: e.toString() }; }
 }
 
 function apiScanAllClassTargets(url, targets, validDays) {
-  let aggregatedMap = {}; 
+  let aggregatedMap = {};
   targets.forEach(sheetName => {
     const res = scanMissingAssignments(url, sheetName, validDays);
-    if(res.success && res.data.length > 0) {
-       res.data.forEach(s => {
-         if(!aggregatedMap[s.seatNo]) aggregatedMap[s.seatNo] = { seatNo: s.seatNo, name: s.name, email: s.email, warnings: [], expired: [] };
-         aggregatedMap[s.seatNo].warnings.push(...s.warnings);
-         aggregatedMap[s.seatNo].expired.push(...s.expired);
-       });
+    if (res.success && res.data.length > 0) {
+      res.data.forEach(s => {
+        if (!aggregatedMap[s.seatNo]) aggregatedMap[s.seatNo] = { seatNo: s.seatNo, name: s.name, email: s.email, warnings: [], expired: [] };
+        aggregatedMap[s.seatNo].warnings.push(...s.warnings);
+        aggregatedMap[s.seatNo].expired.push(...s.expired);
+      });
     }
   });
   return { success: true, data: Object.values(aggregatedMap) };
@@ -119,7 +119,7 @@ function getSheetHeaders(url, sheetName) {
     if (!sheet) throw new Error("找不到分頁");
     const checkRange = sheet.getRange(1, 1, 5, sheet.getLastColumn()).getValues();
     let headers = []; let headerRowIndex = 0;
-    for(let i=0; i<checkRange.length; i++) { if(checkRange[i].includes("座號")) { headers = checkRange[i]; headerRowIndex = i + 1; break; } }
+    for (let i = 0; i < checkRange.length; i++) { if (checkRange[i].includes("座號")) { headers = checkRange[i]; headerRowIndex = i + 1; break; } }
     if (headerRowIndex === 0) throw new Error("找不到含有「座號」的標題列");
     return { success: true, headers: headers, headerRowIndex: headerRowIndex };
   } catch (e) { return { success: false, msg: e.message }; }
@@ -136,10 +136,10 @@ function fetchSheetDataForEmail(url, sheetName, headerRowIndex) {
     const emailMap = getStudentMap(ss);
     const result = dataRange.map(row => {
       let obj = {}; let seatNo = "";
-      headers.forEach((h, i) => { if(h) { obj[h] = row[i]; if(h === "座號") seatNo = String(row[i]); } });
+      headers.forEach((h, i) => { if (h) { obj[h] = row[i]; if (h === "座號") seatNo = String(row[i]); } });
       if (!seatNo) return null;
       let email = "";
-      if (emailMap[seatNo] && emailMap[seatNo].email) { email = emailMap[seatNo].email; obj['姓名'] = emailMap[seatNo].name; } 
+      if (emailMap[seatNo] && emailMap[seatNo].email) { email = emailMap[seatNo].email; obj['姓名'] = emailMap[seatNo].name; }
       else { email = obj['Email'] || obj['電子郵件'] || ""; }
       obj['_email'] = email; obj['_seatNo'] = seatNo; obj['_name'] = obj['姓名'] || "";
       return obj;
@@ -159,15 +159,15 @@ function sendEmailDirect(to, subject, htmlBody, cc) {
 }
 
 function parseScoreValue(rawVal) {
-    if (!isNaN(parseFloat(rawVal)) && isFinite(rawVal)) {
-        return { display: Number(rawVal), calc: Number(rawVal), isValid: true };
-    }
-    const strVal = String(rawVal).trim();
-    const allowList = { '病': null, '公': null, '喪': null, '事': 0, '缺': 0 };
-    if (allowList.hasOwnProperty(strVal)) {
-        return { display: strVal, calc: allowList[strVal], isValid: true };
-    }
-    return { display: '缺', calc: 0, isValid: false };
+  if (!isNaN(parseFloat(rawVal)) && isFinite(rawVal)) {
+    return { display: Number(rawVal), calc: Number(rawVal), isValid: true };
+  }
+  const strVal = String(rawVal).trim();
+  const allowList = { '病': null, '公': null, '喪': null, '事': 0, '缺': 0 };
+  if (allowList.hasOwnProperty(strVal)) {
+    return { display: strVal, calc: allowList[strVal], isValid: true };
+  }
+  return { display: '缺', calc: 0, isValid: false };
 }
 
 function triggerDailyAutomation() {
@@ -186,10 +186,10 @@ function triggerDailyAutomation() {
   try {
     log.push("\n--- [Task 2] 成績資料庫同步 ---");
     const syncResult = apiSyncToDatabase();
-    if(syncResult.success) {
-       log.push(`✅ 資料庫同步成功！共更新 ${syncResult.count} 筆資料。`);
+    if (syncResult.success) {
+      log.push(`✅ 資料庫同步成功！共更新 ${syncResult.count} 筆資料。`);
     } else {
-       log.push(`⚠️ 資料庫同步失敗: ${syncResult.msg}`);
+      log.push(`⚠️ 資料庫同步失敗: ${syncResult.msg}`);
     }
   } catch (e) {
     log.push(`❌ 同步發生嚴重錯誤: ${e.toString()}`);
@@ -197,23 +197,23 @@ function triggerDailyAutomation() {
 
   try {
     const teacherEmail = Session.getActiveUser().getEmail();
-    if(teacherEmail) {
-        MailApp.sendEmail(teacherEmail, "【GradeFlow】每日自動化執行報告", log.join("\n"));
+    if (teacherEmail) {
+      MailApp.sendEmail(teacherEmail, "【GradeFlow】每日自動化執行報告", log.join("\n"));
     }
-  } catch(e) {
+  } catch (e) {
     console.error("無法寄送報告", e);
   }
 }
 
 function runAutoMissingScan() {
-  const list = getListByMode('subject'); 
+  const list = getListByMode('subject');
   const tpl = loadUserTemplates();
   let count = 0;
   let logs = [];
 
   list.forEach(cls => {
-    if (!cls.targets || cls.targets.length === 0) return; 
-    let aggregatedMap = {}; 
+    if (!cls.targets || cls.targets.length === 0) return;
+    let aggregatedMap = {};
     let hasData = false;
 
     cls.targets.forEach(sheetName => {
@@ -230,35 +230,35 @@ function runAutoMissingScan() {
                   let cell = sheet.getRange(item.row, item.col);
                   cell.setValue(0);
                   if (!cell.getNote().includes("逾期")) cell.setNote("系統標記：逾期缺交 (0分)");
-                  cell.setBackground("#fff9c4"); 
-                } catch (e) {}
+                  cell.setBackground("#fff9c4");
+                } catch (e) { }
               });
             }
           });
-        } catch(e) {}
+        } catch (e) { }
 
         result.data.forEach(s => {
-           if (!aggregatedMap[s.seatNo]) aggregatedMap[s.seatNo] = { name: s.name, email: s.email, warnings: [], expired: [] };
-           aggregatedMap[s.seatNo].warnings.push(...s.warnings);
-           aggregatedMap[s.seatNo].expired.push(...s.expired);
+          if (!aggregatedMap[s.seatNo]) aggregatedMap[s.seatNo] = { name: s.name, email: s.email, warnings: [], expired: [] };
+          aggregatedMap[s.seatNo].warnings.push(...s.warnings);
+          aggregatedMap[s.seatNo].expired.push(...s.expired);
         });
       }
     });
 
-    if(hasData) {
-        Object.values(aggregatedMap).forEach(s => {
-           try {
-             const emailContent = generateConsolidatedEmailHtml(s, tpl);
-             const subject = tpl.missingSubject.replace('{{姓名}}', s.name);
-             sendEmailDirect(s.email, subject, emailContent, cls.cc);
-             count++;
-           } catch (err) { logs.push(`寄送失敗: ${s.name} (${err})`); }
-        });
-        logs.push(`班級 [${cls.name}]: 已通知 ${Object.keys(aggregatedMap).length} 位學生`);
+    if (hasData) {
+      Object.values(aggregatedMap).forEach(s => {
+        try {
+          const emailContent = generateConsolidatedEmailHtml(s, tpl);
+          const subject = tpl.missingSubject.replace('{{姓名}}', s.name);
+          sendEmailDirect(s.email, subject, emailContent, cls.cc);
+          count++;
+        } catch (err) { logs.push(`寄送失敗: ${s.name} (${err})`); }
+      });
+      logs.push(`班級 [${cls.name}]: 已通知 ${Object.keys(aggregatedMap).length} 位學生`);
     }
   });
-  
-  if(count === 0) return "今日無缺交需通知。";
+
+  if (count === 0) return "今日無缺交需通知。";
   return `已發送 ${count} 封通知信。\n` + logs.join("\n");
 }
 
@@ -284,10 +284,10 @@ function setupTrigger() {
     }
   }
   ScriptApp.newTrigger('triggerDailyAutomation')
-      .timeBased()
-      .everyDays(1)
-      .atHour(8)
-      .create();
+    .timeBased()
+    .everyDays(1)
+    .atHour(8)
+    .create();
   return "排程設定完成！每天早上 8 點自動執行。";
 }
 
@@ -304,30 +304,32 @@ function triggerPreviewSummary() {
   list.forEach(cls => {
     if (!cls.targets || cls.targets.length === 0) return;
     const scanRes = apiScanAllClassTargets(cls.url, cls.targets, cls.days);
-    
+
     if (scanRes.success && scanRes.data.length > 0) {
-       scanRes.data.forEach(student => {
-         const items = [...student.warnings, ...student.expired];
-         items.forEach(item => {
-           allMissingData.push({
-             className: cls.name,
-             seatNo: student.seatNo,
-             name: student.name,
-             task: item.task,
-             date: item.date,
-             status: item.status, 
-             isExpired: item.status.includes("過期")
-           });
-         });
-       });
-       log.push(`✅ [${cls.name}] 掃描完成，發現 ${scanRes.data.length} 位學生有缺交。`);
+      scanRes.data.forEach(student => {
+        const items = [...student.warnings, ...student.expired];
+        items.forEach(item => {
+          allMissingData.push({
+            className: cls.name,
+            seatNo: student.seatNo,
+            name: student.name,
+            task: item.task,
+            date: item.date,
+            status: item.status,
+            isExpired: item.status.includes("過期")
+          });
+        });
+      });
+      log.push(`✅ [${cls.name}] 掃描完成，發現 ${scanRes.data.length} 位學生有缺交。`);
     } else {
-       log.push(`⚪ [${cls.name}] 目前無缺交資料。`);
+      log.push(`⚪ [${cls.name}] 目前無缺交資料。`);
     }
   });
 
   if (allMissingData.length === 0) {
-    MailApp.sendEmail(teacherEmail, "【GradeFlow】缺交預覽：今日無任何缺交", log.join("\n"));
+    try {
+      MailApp.sendEmail(teacherEmail, "【GradeFlow】缺交預覽：今日無任何缺交", log.join("\n"));
+    } catch (e) { console.error("寄信失敗: " + e); }
     return;
   }
 
@@ -345,11 +347,13 @@ function triggerPreviewSummary() {
     </div>
   `;
 
-  MailApp.sendEmail({
-    to: teacherEmail,
-    subject: emailSubject,
-    htmlBody: emailBody
-  });
+  try {
+    MailApp.sendEmail({
+      to: teacherEmail,
+      subject: emailSubject,
+      htmlBody: emailBody
+    });
+  } catch (e) { console.error("寄信失敗: " + e); }
 }
 
 function generateSummaryTableHtml(data) {
@@ -370,9 +374,9 @@ function generateSummaryTableHtml(data) {
 
   data.forEach((row, index) => {
     const bg = index % 2 === 0 ? '#ffffff' : '#f8fafc';
-    const statusColor = row.isExpired ? '#dc2626' : '#d97706'; 
+    const statusColor = row.isExpired ? '#dc2626' : '#d97706';
     const statusBg = row.isExpired ? '#fef2f2' : '#fffbeb';
-    
+
     html += `
       <tr style="background: ${bg}; border-bottom: 1px solid #e2e8f0;">
         <td style="padding: 10px; font-weight: bold; color: #334155;">${row.className}</td>
@@ -391,4 +395,102 @@ function generateSummaryTableHtml(data) {
 
   html += `</tbody></table>`;
   return html;
+}
+
+/**
+ * 取得目前的自動排程設定
+ */
+function apiGetTriggerSettings() {
+  try {
+    const triggers = ScriptApp.getProjectTriggers();
+    const settings = {
+      triggerDailyAutomation: { enabled: false, hour: 8 },
+      apiSyncToDatabase: { enabled: false, hour: 0 }
+    };
+
+    triggers.forEach(t => {
+      const handler = t.getHandlerFunction();
+      if (settings[handler]) {
+        settings[handler].enabled = true;
+      }
+    });
+
+    // 嘗試從 System Property 讀取上次設定的小時 (若有) 以優化顯示
+    const savedConfig = getSystemProperty("TRIGGER_CONFIG");
+    if (savedConfig) {
+      const parsed = JSON.parse(savedConfig);
+      if (parsed.triggerDailyAutomation) settings.triggerDailyAutomation.hour = parsed.triggerDailyAutomation.hour;
+      if (parsed.apiSyncToDatabase) settings.apiSyncToDatabase.hour = parsed.apiSyncToDatabase.hour;
+    }
+
+    return sanitizeForFrontend({ success: true, settings: settings });
+  } catch (e) {
+    return sanitizeForFrontend({ success: false, msg: e.toString() });
+  }
+}
+
+/**
+ * 儲存自動排程設定
+ * @param {Object} config e.g. { triggerDailyAutomation: { enabled: true, hour: 8 } }
+ */
+function apiSaveTriggerSettings(config) {
+  try {
+    const triggers = ScriptApp.getProjectTriggers();
+
+    // 1. 先清除舊的相關觸發器
+    Object.keys(config).forEach(handlerName => {
+      triggers.forEach(t => {
+        if (t.getHandlerFunction() === handlerName) {
+          ScriptApp.deleteTrigger(t);
+        }
+      });
+    });
+
+    // 2. 建立新觸發器
+    Object.keys(config).forEach(handlerName => {
+      const item = config[handlerName];
+      if (item.enabled) {
+        ScriptApp.newTrigger(handlerName)
+          .timeBased()
+          .everyDays(1)
+          .atHour(parseInt(item.hour))
+          .create();
+      }
+    });
+
+    // 3. 儲存設定值 (為了記住小時)
+    setSystemProperty("TRIGGER_CONFIG", JSON.stringify(config), "自動排程設定快照");
+
+    return sanitizeForFrontend({ success: true });
+  } catch (e) {
+    return sanitizeForFrontend({ success: false, msg: e.toString() });
+  }
+}
+
+/**
+ * 遞迴處理物件中的 Date 物件，轉為 ISO 字串，避免 google.script.run 失敗
+ * @param {any} data 
+ * @returns {any}
+ */
+function sanitizeForFrontend(data) {
+  if (data === null || data === undefined) return data;
+
+  if (data instanceof Date) {
+    // 轉為 ISO 字串，讓前端好處理
+    return Utilities.formatDate(data, Session.getScriptTimeZone(), "yyyy/MM/dd HH:mm:ss");
+  }
+
+  if (Array.isArray(data)) {
+    return data.map(item => sanitizeForFrontend(item));
+  }
+
+  if (typeof data === 'object') {
+    const newObj = {};
+    for (const key in data) {
+      newObj[key] = sanitizeForFrontend(data[key]);
+    }
+    return newObj;
+  }
+
+  return data;
 }

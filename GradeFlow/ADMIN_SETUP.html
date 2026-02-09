@@ -26,8 +26,8 @@
        </div>
        
        <div class="space-y-4">
-           <div>
-               <label class="block text-xs font-bold text-slate-500 mb-1 ml-1">資料庫網址 (Spreadsheet URL)</label>
+            <div>
+               <label class="block text-xs font-bold text-slate-500 mb-1 ml-1">資料庫網址 (Spreadsheet URL) <span class="text-xs text-slate-400 font-normal">(選填，若留空則使用本檔案)</span></label>
                <input id="inp-db-url" type="text" class="w-full border border-slate-300 rounded-lg p-3 text-sm focus:border-blue-500 outline-none transition-colors" placeholder="https://docs.google.com/spreadsheets/d/...">
            </div>
 
@@ -46,7 +46,7 @@
         const url = document.getElementById('inp-db-url').value.trim();
         const salt = document.getElementById('inp-salt').value.trim();
 
-        if(!url) return alert("請輸入資料庫網址");
+        if(!salt) return alert("請輸入加密金鑰 (Salt)");
         
         const btn = document.getElementById('btn-save'); 
         const orgText = btn.innerText;

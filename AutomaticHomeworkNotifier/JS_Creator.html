@@ -50,7 +50,6 @@
         document.getElementById('creator-workspace').classList.remove('hidden');
         
         const titles = {
-            'single': '<span class="text-blue-600 bg-blue-50 px-2 py-1 rounded text-sm mr-2"><i class="fa-solid fa-file-invoice"></i></span> 成績單範本',
             'batch': '<span class="text-indigo-600 bg-indigo-50 px-2 py-1 rounded text-sm mr-2"><i class="fa-solid fa-industry"></i></span> 批次建立工廠',
             'db': '<span class="text-emerald-600 bg-emerald-50 px-2 py-1 rounded text-sm mr-2"><i class="fa-solid fa-database"></i></span> 資料中繼站'
         };
@@ -78,90 +77,103 @@
     }
 
     // --- 資料夾邏輯 ---
+    // --- 資料夾邏輯 (Restored for v12.1) ---
     function refreshFolderInfo() {
         const display = document.getElementById('current-folder-display');
-        const link = document.getElementById('link-open-drive');
-        display.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i>';
-        google.script.run.withSuccessHandler(res => {
-            if(res.success) {
-                display.innerText = res.name || "根目錄";
-                currentFolderId = res.id;
-                if(res.id) { link.href = "https://drive.google.com/drive/folders/" + res.id; link.classList.remove('pointer-events-none', 'opacity-50', 'bg-slate-300'); link.classList.add('bg-amber-500', 'hover:bg-amber-600'); } 
-                else { link.href = "https://drive.google.com/drive/my-drive"; }
-            }
-        }).apiGetStorageFolder();
+        if(display) {
+             google.script.run.withSuccessHandler(res => {
+                 if(res.success) {
+                     display.innerText = res.name;
+                     // Store current ID if needed
+                 } else {
+                     display.innerText = "尚未設定 (將存於根目錄)";
+                 }
+             }).apiGetStorageFolder();
+        }
     }
 
     function browseDrive(folderId) {
         const list = document.getElementById('drive-browser-list');
-        const path = document.getElementById('browser-path');
-        const btnUp = document.getElementById('btn-nav-up');
-        
-        list.innerHTML = '<div class="text-center text-slate-400 py-10"><i class="fa-solid fa-spinner fa-spin mr-2"></i>載入中...</div>';
+        list.innerHTML = '<div class="p-4 text-center text-slate-400"><i class="fa-solid fa-spinner fa-spin mr-2"></i>讀取中...</div>';
         
         google.script.run.withSuccessHandler(res => {
-            if(!res.success) { list.innerHTML = '<div class="text-red-400 text-center py-4">讀取失敗</div>'; return; }
-            
-            path.innerText = res.current.name;
-            currentParentId = res.parent; 
-            btnUp.disabled = !res.parent; 
-            if(!res.parent) btnUp.classList.add('opacity-50', 'cursor-not-allowed');
-            else btnUp.classList.remove('opacity-50', 'cursor-not-allowed');
+            if(!res.success) {
+                list.innerHTML = `<div class="p-4 text-center text-red-400">${res.msg}</div>`;
+                return;
+            }
 
-            list.innerHTML = '';
-            if(res.children.length === 0) list.innerHTML = '<div class="text-center text-slate-300 py-8 text-xs italic">此資料夾為空</div>';
-            else {
+            // Update Breadcrumbs / Navigation
+            currentFolderId = res.current.id;
+            currentParentId = res.parent;
+            document.getElementById('browser-path').innerText = res.current.name;
+            document.getElementById('btn-nav-up').disabled = !res.parent;
+            
+            // Render Children
+            if(res.children.length === 0) {
+                list.innerHTML = '<div class="p-8 text-center text-slate-300">此資料夾為空</div>';
+            } else {
+                let html = '';
                 res.children.forEach(folder => {
-                    const div = document.createElement('div');
-                    div.className = "flex items-center justify-between p-3 hover:bg-slate-100 rounded-lg cursor-pointer group transition-colors border border-transparent hover:border-slate-200 mb-1";
-                    div.innerHTML = `
-                        <div class="flex items-center gap-3 min-w-0 flex-1" onclick="browseDrive('${folder.id}')">
-                            <i class="fa-solid fa-folder text-amber-400 text-xl group-hover:text-amber-500 transition-colors"></i> 
-                            <span class="text-slate-700 font-bold truncate text-sm">${folder.name}</span>
+                    html += `
+                    <div class="flex items-center justify-between p-3 hover:bg-white rounded-lg group transition-colors cursor-pointer border border-transparent hover:border-indigo-100" onclick="browseDrive('${folder.id}')">
+                        <div class="flex items-center gap-3">
+                            <i class="fa-solid fa-folder text-amber-400 text-xl group-hover:scale-110 transition-transform"></i>
+                            <span class="text-slate-700 font-bold text-sm">${escapeHtml(folder.name)}</span>
                         </div>
-                        <button onclick="selectFolder('${folder.id}', '${folder.name}')" class="flex-shrink-0 text-xs bg-white border border-slate-200 text-slate-500 hover:text-amber-600 hover:border-amber-300 px-3 py-1.5 rounded transition-all shadow-sm">選取</button>
-                    `;
-                    list.appendChild(div);
+                        <button onclick="event.stopPropagation(); selectFolder('${folder.id}', '${escapeHtml(folder.name)}')" class="opacity-0 group-hover:opacity-100 bg-indigo-50 hover:bg-indigo-600 hover:text-white text-indigo-600 px-3 py-1 rounded text-xs font-bold transition-all transform scale-90 hover:scale-100">
+                            選取
+                        </button>
+                    </div>`;
                 });
+                list.innerHTML = html;
             }
         }).apiBrowseDrive(folderId);
     }
 
-    let pendingFolderId = "";
     function selectFolder(id, name) {
         pendingFolderId = id;
         const btn = document.getElementById('btn-set-folder');
-        btn.innerText = `設定為：${name}`;
-        btn.classList.add('bg-amber-600', 'ring-2', 'ring-amber-200');
+        btn.innerText = `確認設定: ${name}`;
         btn.classList.remove('bg-amber-500');
+        btn.classList.add('bg-amber-600', 'ring-2', 'ring-amber-200');
+        showToast("已選取", `準備設定為: ${name}`, "info");
     }
 
     function saveCurrentFolder() {
-        if(!pendingFolderId) return alert("請先從列表中點擊「選取」按鈕");
+        if(!pendingFolderId) {
+             // If user implies "Current Folder" (the one being browsed)
+             if(currentFolderId) pendingFolderId = currentFolderId;
+             else { showToast("未選取", "請選擇一個資料夾", "warning"); return; }
+        }
+
         const btn = document.getElementById('btn-set-folder');
-        btn.innerText = "儲存中...";
-        btn.disabled = true;
+        const orgText = btn.innerText;
+        btn.innerText = "儲存中..."; btn.disabled = true;
 
         google.script.run.withSuccessHandler(res => {
+            btn.innerText = orgText; btn.disabled = false;
             if(res.success) {
-                showToast("設定成功", `已更新預設存檔位置：${res.folderName}`, "success");
+                showToast("設定完成", `預設存檔位置已更新為: ${res.name}`, "success");
                 refreshFolderInfo();
-                closeDriveBrowser(); // 成功後關閉 Modal
+                closeDriveBrowser();
             } else {
-                alert(res.msg);
+                showToast("失敗", res.msg, "error");
             }
-            btn.innerText = "確認設定";
-            btn.disabled = false;
         }).apiSaveStorageFolder(pendingFolderId);
     }
 
     // --- 表格操作邏輯 ---
     function addBatchRow() {
         const tbody = document.getElementById('batch-table-body');
-        const rowId = 'row-' + Date.now();
+        const timestamp = Date.now();
+        const rowId = 'row-' + timestamp;
+        const detailId = 'detail-' + timestamp;
+        
+        // 1. Main Row
         const tr = document.createElement('tr');
         tr.className = "batch-row hover:bg-slate-50 transition-colors group border-b border-slate-100";
         tr.id = rowId;
+        tr.dataset.detailId = detailId; // Link to detail row
         
         tr.innerHTML = `
             <td class="py-3 px-4 text-slate-300 font-mono text-xs select-none">
@@ -179,56 +191,59 @@
             <td class="py-2 px-2 text-center">
                 <input type="checkbox" class="inp-public w-5 h-5 text-indigo-600 rounded focus:ring-indigo-500 cursor-pointer">
             </td>
-            <td class="py-2 px-2 text-center">
+            <td class="py-2 px-2 text-center flex items-center justify-center gap-2">
+                <button onclick="toggleDetail('${detailId}')" class="text-slate-300 hover:text-indigo-600 hover:bg-indigo-50 rounded-full w-8 h-8 transition-all flex items-center justify-center" title="設定個別名單">
+                    <i class="fa-solid fa-user-group"></i>
+                </button>
                 <button onclick="removeBatchRow('${rowId}')" class="text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-full w-8 h-8 transition-all flex items-center justify-center" title="刪除此列">
                     <i class="fa-solid fa-trash"></i>
                 </button>
             </td>
         `;
+
+        // 2. Detail Row (Hidden)
+        const trDetail = document.createElement('tr');
+        trDetail.id = detailId;
+        trDetail.className = "hidden bg-indigo-50/50 border-b border-indigo-100";
+        trDetail.innerHTML = `
+            <td colspan="6" class="p-4">
+                <div class="flex items-start gap-4">
+                    <div class="text-xs font-bold text-indigo-600 whitespace-nowrap pt-2"><i class="fa-solid fa-level-up-alt rotate-90 mr-2"></i>個別名單設定</div>
+                    <div class="flex-1">
+                         <div class="text-xs text-slate-500 mb-1">若填寫此處，將<span class="font-bold text-slate-700">優先</span>於上方統一名單。格式：<code>座號 姓名 Email</code></div>
+                         <textarea class="inp-individual-students w-full bg-white border border-indigo-200 rounded px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500 outline-none h-20 font-mono" placeholder="留空則使用統一設定"></textarea>
+                    </div>
+                </div>
+            </td>
+        `;
+
         tbody.appendChild(tr);
+        tbody.appendChild(trDetail);
+    }
+
+    function toggleDetail(detailId) {
+        const el = document.getElementById(detailId);
+        if(el) {
+            el.classList.toggle('hidden');
+            // Visual feedback on the button? (Optional)
+        }
     }
 
     function removeBatchRow(id) {
         const row = document.getElementById(id);
-        if(row) row.remove();
+        if(row) {
+            const detailId = row.dataset.detailId;
+            if(detailId) {
+                const detailRow = document.getElementById(detailId);
+                if(detailRow) detailRow.remove();
+            }
+            row.remove();
+        }
         if(document.getElementById('batch-table-body').children.length === 0) addBatchRow();
     }
 
     // --- 執行邏輯 ---
-    function runSingleCreate() {
-        const elTitle = document.getElementById('inp-single-title');
-        const elSheets = document.getElementById('inp-single-sheets');
-        const elStudents = document.getElementById('inp-single-students');
 
-        const title = elTitle ? elTitle.value.trim() : "";
-        const sheetsStr = elSheets ? elSheets.value.trim() : "";
-        const studentStr = elStudents ? elStudents.value : "";
-        
-        if(!title) { showToast("缺少資訊", "請輸入檔案名稱", "error"); return; }
-        
-        const btn = document.getElementById('btn-create-single');
-        const orgHtml = btn.innerHTML;
-        btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin mr-2"></i>建立中...'; btn.disabled = true;
-        
-        const studentList = parseStudentList(studentStr);
-        const config = { 
-            title: title, 
-            sheetsStr: sheetsStr.replace(/,/g, '\n'), 
-            permission: { isPublic: false }, 
-            studentList: studentList 
-        };
-        
-        google.script.run.withSuccessHandler(res => {
-            btn.innerHTML = orgHtml; btn.disabled = false;
-            if(res.success) { 
-                showToast("建立成功", "檔案已建立", "success");
-                window.open(res.results[0].url, '_blank'); 
-                if(elTitle) elTitle.value = "";
-            } else {
-                showToast("建立失敗", res.msg, "error");
-            }
-        }).apiBatchCreateTemplates([config]);
-    }
 
     function runBatchCreate() {
         const rows = document.querySelectorAll('.batch-row');
@@ -243,11 +258,28 @@
             const sheetsStr = row.querySelector('.inp-sheets').value.trim();
             const editorEmail = row.querySelector('.inp-editor').value.trim();
             const isPublic = row.querySelector('.inp-public').checked;
+            
+            // Check Individual List
+            const detailId = row.dataset.detailId;
+            let finalStudentList = commonStudentList;
+            
+            if(detailId) {
+                const detailRow = document.getElementById(detailId);
+                if(detailRow) {
+                    const indInput = detailRow.querySelector('.inp-individual-students');
+                    const indStr = indInput ? indInput.value : "";
+                    const indList = parseStudentList(indStr);
+                    if(indList && indList.length > 0) {
+                        finalStudentList = indList;
+                    }
+                }
+            }
+
             configs.push({ 
                 title: title, 
                 sheetsStr: sheetsStr.replace(/,/g, '\n'), 
                 permission: { isPublic: isPublic, editorEmail: editorEmail }, 
-                studentList: commonStudentList
+                studentList: finalStudentList
             });
         });
 
@@ -264,12 +296,12 @@
             if(res.success) {
                 let html = `<div class="mb-2 font-bold text-white border-b border-slate-600 pb-1">執行結果彙整 (${res.results.length} 筆)</div>`;
                 res.results.forEach(r => { 
-                    html += r.success ? `<div class="flex items-center gap-2 mb-1"><span class="text-green-400">✅</span> <a href="${r.url}" target="_blank" class="underline hover:text-white">${r.title}</a></div>` : `<div class="flex items-center gap-2 mb-1"><span class="text-red-400">❌</span> <span class="text-slate-300">${r.title}: ${r.error}</span></div>`; 
+                    html += r.success ? `<div class="flex items-center gap-2 mb-1"><span class="text-green-400">✅</span> <a href="${r.url}" target="_blank" class="underline hover:text-white">${escapeHtml(r.title)}</a></div>` : `<div class="flex items-center gap-2 mb-1"><span class="text-red-400">❌</span> <span class="text-slate-300">${escapeHtml(r.title)}: ${escapeHtml(r.error)}</span></div>`; 
                 });
                 if(logArea) logArea.innerHTML = html;
                 showToast("批次完成", `成功建立 ${res.results.filter(r=>r.success).length} 個檔案`, "success");
             } else { 
-                if(logArea) logArea.innerHTML = `<div class="text-red-400 font-bold">❌ 系統錯誤: ${res.msg}</div>`; 
+                if(logArea) logArea.innerHTML = `<div class="text-red-400 font-bold">❌ 系統錯誤: ${escapeHtml(res.msg)}</div>`; 
                 showToast("發生錯誤", res.msg, "error"); 
             }
         }).apiBatchCreateTemplates(configs);

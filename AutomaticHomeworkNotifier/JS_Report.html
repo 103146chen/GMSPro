@@ -63,8 +63,8 @@
       // 漂亮的 Checkbox 樣式
       div.innerHTML += `
         <label class="flex items-center p-2 rounded hover:bg-slate-50 cursor-pointer transition-colors border-b border-slate-100 last:border-0">
-            <input type="checkbox" value="${h}" class="col-check w-4 h-4 text-blue-600 rounded focus:ring-blue-500 border-gray-300 mr-3" ${checked} onchange="updateSimplePreview()"> 
-            <span class="text-sm text-slate-700 select-none">${h}</span>
+            <input type="checkbox" value="${escapeHtml(h)}" class="col-check w-4 h-4 text-blue-600 rounded focus:ring-blue-500 border-gray-300 mr-3" ${checked} onchange="updateSimplePreview()"> 
+            <span class="text-sm text-slate-700 select-none">${escapeHtml(h)}</span>
         </label>`; 
     });
 
@@ -100,12 +100,12 @@
     const cols = reportRawData.selectedCols;
     
     // 生成預覽表格 HTML
-    const th = cols.map(c=>`<th class="border border-slate-300 px-3 py-2 bg-slate-50 text-slate-600 font-bold">${c}</th>`).join('');
-    const td = cols.map(c=>`<td class="border border-slate-300 px-3 py-2 text-center text-slate-800">${s[c]||''}</td>`).join('');
+    const th = cols.map(c=>`<th class="border border-slate-300 px-3 py-2 bg-slate-50 text-slate-600 font-bold">${escapeHtml(c)}</th>`).join('');
+    const td = cols.map(c=>`<td class="border border-slate-300 px-3 py-2 text-center text-slate-800">${escapeHtml(s[c]||'')}</td>`).join('');
     
     const html = `
         <div class="mb-4 text-center">
-            <div class="font-bold text-lg text-blue-700">${s._name || '學生姓名'}</div>
+            <div class="font-bold text-lg text-blue-700">${escapeHtml(s._name || '學生姓名')}</div>
             <div class="text-xs text-slate-400">預覽視圖 (第一位學生)</div>
         </div>
         <table class="w-full border-collapse text-xs shadow-sm">

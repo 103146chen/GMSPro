@@ -2,6 +2,19 @@
     // 定義全域計時器 ID
     let toastTimer = null;
 
+    /**
+     * XSS 防護：HTML 跳脫字元
+     */
+    function escapeHtml(text) {
+      if (!text) return text;
+      return String(text)
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#039;");
+    }
+
     // Toast 通知 (終極修正版：加入透明度變化)
     function showToast(title, msg, type, duration) {
       const t = document.getElementById('toast');
@@ -14,7 +27,7 @@
 
       // 2. 設定內容
       document.getElementById('toastTitle').innerText = title;
-      document.getElementById('toastMsg').innerHTML = msg;
+      document.getElementById('toastMsg').innerHTML = escapeHtml(msg);
       
       // 3. 設定顯示狀態 (重置 Class)
       // 加入 opacity-100 確保顯示時是不透明的
@@ -51,7 +64,7 @@
       const chip = document.createElement('div'); 
       chip.className = "tag-chip animate-[fadeIn_0.2s_ease-out]"; 
       chip.dataset.val = text; 
-      chip.innerHTML = `<span>${text}</span><button onclick="this.parentElement.remove()"><i class="fa-solid fa-xmark"></i></button>`; 
+      chip.innerHTML = `<span>${escapeHtml(text)}</span><button onclick="this.parentElement.remove()"><i class="fa-solid fa-xmark"></i></button>`; 
       container.insertBefore(chip, container.querySelector('input'));
     }
 </script>

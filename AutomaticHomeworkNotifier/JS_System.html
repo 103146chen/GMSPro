@@ -5,6 +5,71 @@
 
     function renderSystemView() {
         checkSaltStatus();
+        initTriggerHours();
+        loadTriggerSettings();
+    }
+
+    function initTriggerHours() {
+        const createOpts = (selId) => {
+            const sel = document.getElementById(selId);
+            if(!sel) return;
+            sel.innerHTML = "";
+            for(let i=0; i<24; i++) {
+                const hour = i < 10 ? "0"+i : i;
+                sel.add(new Option(`每天 ${hour}:00`, i));
+            }
+        };
+        createOpts('sel-notify-hour');
+        createOpts('sel-sync-hour');
+    }
+
+    function loadTriggerSettings() {
+        google.script.run.withSuccessHandler(res => {
+            if(res.success) {
+                const s = res.settings;
+                // 1. Daily Notify
+                const tgNotify = document.getElementById('tg-auto-notify');
+                if(tgNotify) {
+                    tgNotify.checked = s.triggerDailyAutomation.enabled;
+                    document.getElementById('sel-notify-hour').value = s.triggerDailyAutomation.hour;
+                }
+                
+                // 2. DB Sync
+                const tgSync = document.getElementById('tg-auto-sync');
+                if(tgSync) {
+                    tgSync.checked = s.apiSyncToDatabase.enabled;
+                    document.getElementById('sel-sync-hour').value = s.apiSyncToDatabase.hour;
+                }
+            }
+        }).apiGetTriggerSettings();
+    }
+
+    function saveTriggerSettings() {
+        const btn = document.getElementById('btn-save-trigger');
+        const orgHtml = btn.innerHTML;
+        btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin mr-2"></i> 儲存中...';
+        btn.disabled = true;
+
+        const config = {
+            triggerDailyAutomation: {
+                enabled: document.getElementById('tg-auto-notify').checked,
+                hour: parseInt(document.getElementById('sel-notify-hour').value)
+            },
+            apiSyncToDatabase: {
+                enabled: document.getElementById('tg-auto-sync').checked,
+                hour: parseInt(document.getElementById('sel-sync-hour').value)
+            }
+        };
+
+        google.script.run.withSuccessHandler(res => {
+            btn.innerHTML = orgHtml;
+            btn.disabled = false;
+            if(res.success) {
+                showToast("成功", "排程設定已更新", "success", 1000);
+            } else {
+                showToast("錯誤", res.msg, "error", 5000);
+            }
+        }).apiSaveTriggerSettings(config);
     }
 
     function checkSaltStatus() {
@@ -34,16 +99,58 @@
 
         google.script.run.withSuccessHandler(res => {
             if (res.success) {
-                navigator.clipboard.writeText(res.text).then(() => {
-                    btn.innerHTML = '<i class="fa-solid fa-check mr-2"></i>已複製設定資訊';
-                    setTimeout(() => { btn.innerHTML = orgHtml; btn.disabled = false; }, 2000);
-                });
+                // Try modern clipboard API first
+                if (navigator.clipboard && navigator.clipboard.writeText) {
+                    navigator.clipboard.writeText(res.text).then(() => {
+                        showCopySuccess(btn, orgHtml);
+                    }).catch(err => {
+                        console.warn("Clipboard API failed, trying fallback...", err);
+                        fallbackCopyTextToClipboard(res.text, btn, orgHtml);
+                    });
+                } else {
+                    fallbackCopyTextToClipboard(res.text, btn, orgHtml);
+                }
             } else {
                 alert(res.msg);
                 btn.innerHTML = orgHtml;
                 btn.disabled = false;
             }
         }).apiGetConfigForCopy();
+    }
+
+    function showCopySuccess(btn, orgHtml) {
+        btn.innerHTML = '<i class="fa-solid fa-check mr-2"></i>已複製設定資訊';
+        setTimeout(() => { btn.innerHTML = orgHtml; btn.disabled = false; }, 2000);
+    }
+
+    function fallbackCopyTextToClipboard(text, btn, orgHtml) {
+        try {
+            var textArea = document.createElement("textarea");
+            textArea.value = text;
+            
+            // Ensure it's not visible but part of DOM
+            textArea.style.top = "0";
+            textArea.style.left = "0";
+            textArea.style.position = "fixed";
+            
+            document.body.appendChild(textArea);
+            textArea.focus();
+            textArea.select();
+            
+            var successful = document.execCommand('copy');
+            document.body.removeChild(textArea);
+            
+            if (successful) {
+                showCopySuccess(btn, orgHtml);
+            } else {
+                throw new Error("execCommand failed");
+            }
+        } catch (err) {
+            console.error('Fallback: Oops, unable to copy', err);
+            prompt("複製失敗，請手動複製以下內容：", text);
+            btn.innerHTML = orgHtml;
+            btn.disabled = false;
+        }
     }
 
     function saveSystemSalt() {
@@ -90,37 +197,7 @@
         }).apiArchiveDatabase();
     }
 
-    /**
-     * 手動觸發缺交預覽信
-     */
-    function sendPreviewSummary() {
-        const btn = document.getElementById('btn-test-preview');
-        const orgHtml = btn.innerHTML;
-        
-        // 1. 鎖定按鈕避免重複點擊
-        btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin mr-2"></i> 系統掃描中...';
-        btn.disabled = true;
-        btn.classList.add('bg-slate-100', 'text-slate-400'); // 視覺灰階化
 
-        // 2. 呼叫後端
-        google.script.run.withSuccessHandler(res => {
-            // 3. 還原按鈕
-            btn.innerHTML = '<i class="fa-solid fa-check mr-2"></i> 已發送';
-            setTimeout(() => {
-                btn.innerHTML = orgHtml;
-                btn.disabled = false;
-                btn.classList.remove('bg-slate-100', 'text-slate-400');
-            }, 3000); // 3秒後變回原樣
-            
-            showToast("完成", "預覽信已寄出，請檢查您的信箱", "success",1000);
-            
-        }).withFailureHandler(err => {
-            btn.innerHTML = orgHtml;
-            btn.disabled = false;
-            btn.classList.remove('bg-slate-100', 'text-slate-400');
-            showToast("錯誤", "發送失敗：" + err.message, "error",5000);
-        }).triggerPreviewSummary(); // 呼叫後端剛剛寫好的函式
-    }
 
     function jumpToDbCreator() {
         // 1. 隱藏所有主要頁面 (View)
